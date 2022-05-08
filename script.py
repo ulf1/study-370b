@@ -7,7 +7,6 @@ import ipasymbols
 import epitran
 import sfst_transduce
 import re
-import matplotlib.pyplot as plt
 import torch
 import tensorflow as tf
 import json
