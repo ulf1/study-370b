@@ -127,3 +127,9 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+data
+TextComplexityDE-master
+master.zip
+SMOR/
+SMOR-linux.zip

@@ -1,0 +1,7 @@
+sentence-transformers==2.2.0
+trankit==1.1.1
+node-distance==0.1.0
+ipasymbols==0.0.1
+epitran==1.18
+sfst-transduce==1.0.1
+tensorflow==2.8.0
