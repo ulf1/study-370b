@@ -289,7 +289,7 @@ def get_random_mos(y1m, y1s, y2m, y2s, y3m, y3s, corr_trgt=0):
     return y1, y2, y3
 
 
-def generator_trainingset(num_draws: int = 10000):
+def generator_trainingset(num_draws: int = 16384):
     for _ in range(num_draws):
         # draw example IDs i,j from buckets
         i, j = np.random.choice(range(36), size=2)
@@ -324,7 +324,7 @@ dim_features = len(feats1[0]) + len(feats2[0]) + len(feats3[0]) + len(feats4[0])
 
 ds_train = tf.data.Dataset.from_generator(
     lambda: generator_trainingset(
-        num_draws=10000
+        num_draws=16384
     ),
     output_signature=(
         {
@@ -337,7 +337,7 @@ ds_train = tf.data.Dataset.from_generator(
 
 
 # Validation set
-def generator_validationset(num_draws=10000):
+def generator_validationset(num_draws=16384):
     for _ in range(num_draws):
         # draw example IDs i,j from buckets
         i, j = np.random.choice(range(36), size=2)
@@ -360,7 +360,7 @@ def generator_validationset(num_draws=10000):
 
 
 ds_valid = tf.data.Dataset.from_generator(
-    lambda: generator_validationset(num_draws=10000),
+    lambda: generator_validationset(num_draws=16384),
     output_signature=(
         {
             "inp_pos": tf.TensorSpec(shape=(dim_features), dtype=tf.float32, name="inp_pos"),
@@ -460,14 +460,14 @@ def loss1_rank_triplet(y_true, y_pred):
     return loss
 
 
-def loss2_mae_target(y_true, y_pred):
+def loss2_mse_target(y_true, y_pred):
     """ MAE loss on positive or negative example if target exists """
-    loss  = tf.reduce_mean(tf.math.abs(y_true[:, 0] - y_pred[:, 0]))
-    loss += tf.reduce_mean(tf.math.abs(y_true[:, 1] - y_pred[:, 1]))
-    loss += tf.reduce_mean(tf.math.abs(y_true[:, 2] - y_pred[:, 2]))
-    loss += tf.reduce_mean(tf.math.abs(y_true[:, 3] - y_pred[:, 3]))
-    loss += tf.reduce_mean(tf.math.abs(y_true[:, 4] - y_pred[:, 4]))
-    loss += tf.reduce_mean(tf.math.abs(y_true[:, 5] - y_pred[:, 5]))
+    loss  = tf.reduce_mean(tf.math.pow(y_true[:, 0] - y_pred[:, 0], 2))
+    loss += tf.reduce_mean(tf.math.pow(y_true[:, 1] - y_pred[:, 1], 2))
+    loss += tf.reduce_mean(tf.math.pow(y_true[:, 2] - y_pred[:, 2], 2))
+    loss += tf.reduce_mean(tf.math.pow(y_true[:, 3] - y_pred[:, 3], 2))
+    loss += tf.reduce_mean(tf.math.pow(y_true[:, 4] - y_pred[:, 4], 2))
+    loss += tf.reduce_mean(tf.math.pow(y_true[:, 5] - y_pred[:, 5], 2))
     return loss
 
 
@@ -509,9 +509,9 @@ def build_siamese_net(dim_features: int,
             beta_1=.9, beta_2=.999, epsilon=1e-7,  # Kingma and Ba, 2014, p.2
             amsgrad=True  # Reddi et al, 2018, p.5-6
         ),
-        loss=[loss1_rank_triplet, loss2_mae_target],
+        loss=[loss1_rank_triplet, loss2_mse_target],
         loss_weights=[0.5, 0.5],
-        metrics=[loss1_rank_triplet, loss2_mae_target],
+        metrics=[loss1_rank_triplet, loss2_mse_target],
     )
 
     return model
