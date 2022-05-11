@@ -333,7 +333,7 @@ ds_train = tf.data.Dataset.from_generator(
         },
         tf.TensorSpec(shape=(6), dtype=tf.float32, name="targets"),
     )
-).batch(batch_size)
+).batch(batch_size).prefetch(1)
 
 
 # Validation set
@@ -368,7 +368,7 @@ ds_valid = tf.data.Dataset.from_generator(
         },
         tf.TensorSpec(shape=(6), dtype=tf.float32, name="targets"),
     )
-).batch(batch_size)
+).batch(batch_size).prefetch(1)
 
 
 # Build the Scoring Model
