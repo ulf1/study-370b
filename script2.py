@@ -56,6 +56,26 @@ del df
 gc.collect()
 
 
+# Masks for 6x6 buckets
+def get_buckets(x1, x2, x3):
+    b1 = np.logical_and(x1 >= x2, x2 >= x3)
+    b2 = np.logical_and(x1 >= x3, x3 >= x2)
+    b3 = np.logical_and(x2 >= x1, x1 >= x3)
+    b4 = np.logical_and(x2 >= x3, x3 >= x1)
+    b5 = np.logical_and(x3 >= x1, x1 >= x2)
+    b6 = np.logical_and(x3 >= x2, x2 >= x1)
+    return b1, b2, b3, b4, b5, b6
+
+buckets_mu = get_buckets(y1mos, y2mos, y3mos)
+buckets_sd = get_buckets(y1std, y2std, y3std)
+
+bucket_indicies = []
+for idxm in range(6):
+    for idxs in range(6):
+        bucket_indicies.append(
+            np.where(np.logical_and(buckets_mu[idxm], buckets_sd[idxs]))[0])
+
+
 # Feature Engineering
 
 # code for PoS-tag distribution
