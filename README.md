@@ -33,4 +33,5 @@ rm SMOR-linux.zip
 ```
 nohup python3 script.py --corr-trgt=0 &
 nohup python3 script.py --corr-trgt=1 &
+nohup python3 script2.py --corr-trgt=0 &
 ```
