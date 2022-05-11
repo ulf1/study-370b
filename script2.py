@@ -373,7 +373,7 @@ ds_valid = tf.data.Dataset.from_generator(
 
 # Build the Scoring Model
 def build_scoring_model(dim_features: int, 
-                        n_units=32, activation="gelu", dropout=0.4):
+                        n_units=64, activation="gelu", dropout=0.4):
     # the input tensor
     inputs = tf.keras.Input(shape=(dim_features,), name="inputs")
 
@@ -472,7 +472,7 @@ def loss2_mse_target(y_true, y_pred):
 
 
 def build_siamese_net(dim_features: int, 
-                      n_units=32, activation="gelu", dropout=0.4):
+                      n_units=64, activation="gelu", dropout=0.4):
     # the input tensors
     inp_pos = tf.keras.Input(shape=(dim_features,), name='inp_pos')
     inp_neg = tf.keras.Input(shape=(dim_features,), name='inp_neg')
@@ -536,7 +536,7 @@ callbacks = [
 
 
 model = build_siamese_net(
-    dim_features, n_units=32, activation="gelu", dropout=0.4)
+    dim_features, n_units=64, activation="gelu", dropout=0.4)
 
 
 history = model.fit(
