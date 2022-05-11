@@ -510,7 +510,7 @@ def build_siamese_net(dim_features: int,
             amsgrad=True  # Reddi et al, 2018, p.5-6
         ),
         loss=[loss1_rank_triplet, loss2_mse_target],
-        loss_weights=[0.5, 0.5],
+        loss_weights=[0.75, 0.25],
         metrics=[loss1_rank_triplet, loss2_mse_target],
     )
 
@@ -523,7 +523,7 @@ callbacks = [
         monitor="val_loss",
         mode="min",
         min_delta=1e-6,
-        patience=10,
+        patience=50,
         restore_best_weights=True
     ),
     tf.keras.callbacks.ModelCheckpoint(
