@@ -4,7 +4,7 @@ import tensorflow as tf
 import json
 import gc
 import argparse
-from featureeng.py import preprocessing, delete_models
+from featureeng import preprocessing, delete_models
 
 
 parser = argparse.ArgumentParser()

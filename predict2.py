@@ -1,6 +1,48 @@
+import tensorflow as tf
+from featureeng import preprocessing, delete_models
+import pandas as pd
+import gc
+import numpy as np
+
+
+# Load the raw data
+df = pd.read_csv("data/ratings.csv", encoding="ISO-8859-1")
+# Input- & Output-Variables
+texts = df["Sentence"].values 
+y1mos = df["MOS_Complexity"].values
+y1std = df["Std_Complexity"].values
+y2mos = df["MOS_Understandability"].values
+y2std = df["Std_Understandability"].values
+y3mos = df["MOS_Lexical_difficulty"].values
+y3std = df["Std_Lexical_difficulty"].values
+# free memory
+del df
+gc.collect()
+
+# Feature engineering
+feats1, feats2, feats3, feats4, feats5, feats6 = preprocessing(texts)
+delete_models()
+
+# Concat
+xinputs = np.hstack([feats1, feats2, feats3, feats4, feats5, feats6])
+
+
+def loss1_rank_triplet(a,b):
+    return 0.0
+
+def loss2_mse_diffs(a,b):
+    return 0.0
+
+def loss3_mse_target(a,b):
+    return 0.0
+
 model = tf.keras.models.load_model(
-    "best-model-370b-siamese-0", 
-    custom_objects={"loss1_rank_triplet": loss1_rank_triplet, "loss2_mse_target": loss2_mae_target})
+    "best-model-370b-siamese-1", 
+    custom_objects={
+        "loss1_rank_triplet": loss1_rank_triplet, 
+        "loss2_mse_diffs": loss2_mse_diffs,
+        "loss3_mse_target": loss3_mse_target
+})
 
 model_scoring = model.layers[2]
 model_scoring.compile(
@@ -10,12 +52,15 @@ model_scoring.compile(
         amsgrad=True  # Reddi et al, 2018, p.5-6
     ),
     loss='mean_absolute_error',
-    metrics=['mean_absolute_error'])
+    metrics=['mean_absolute_error']
+)
 
-xinputs = np.hstack([feats1, feats2, feats3, feats4, feats5, feats6])
-repr, y1hat, y2hat, y3hat = model_scoring.predict(xinputs)
+# Inference
+y1hat, y2hat, y3hat, reprl = model_scoring.predict(xinputs)
 
-loss = tf.math.reduce_mean(tf.math.pow(y1hat - y1mos, 2)) \
-    + tf.math.reduce_mean(tf.math.pow(y2hat - y2mos, 2)) \
-    + tf.math.reduce_mean(tf.math.pow(y3hat - y3mos, 2))
-loss
+# Compute MAEs
+loss1 = tf.math.reduce_mean(tf.math.abs(y1hat - y1mos))
+loss2 = tf.math.reduce_mean(tf.math.abs(y2hat - y2mos))
+loss3 = tf.math.reduce_mean(tf.math.abs(y3hat - y3mos))
+
+print("MAE:", loss1, loss2, loss3)
