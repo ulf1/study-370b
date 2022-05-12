@@ -112,10 +112,10 @@ def generator_trainingset(num_draws: int = 65536):
         # simulate noise targets
         y1pos, y2pos, y3pos = get_random_mos(
             y1mos[i], y1std[i], y2mos[i], y2std[i], y3mos[i], y3std[i], 
-            corr_trgt=args.corr_trgt)
+            y_rho=y_rho, corr_trgt=args.corr_trgt)
         y1neg, y2neg, y3neg = get_random_mos(
             y1mos[j], y1std[j], y2mos[j], y2std[j], y3mos[j], y3std[j], 
-            corr_trgt=args.corr_trgt)
+            y_rho=y_rho, corr_trgt=args.corr_trgt)
 
         # compute differences
         d1 = y1mos[i] - y1mos[j]

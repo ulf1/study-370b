@@ -56,7 +56,7 @@ def generator_trainingset(num_bootstrap: int = 64):
             # simulate noise targets
             y1, y2, y3 = get_random_mos(
                 y1mos[i], y1std[i], y2mos[i], y2std[i], y3mos[i], y3std[i], 
-                corr_trgt=args.corr_trgt)
+                y_rho=y_rho, corr_trgt=args.corr_trgt)
 
             outputs = [y1, y2, y3]
             yield {

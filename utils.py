@@ -1,7 +1,7 @@
 import numpy as np
 
 
-def get_random_mos(y1m, y1s, y2m, y2s, y3m, y3s, corr_trgt=0):
+def get_random_mos(y1m, y1s, y2m, y2s, y3m, y3s, y_rho=None, corr_trgt=0):
     if corr_trgt == 0:
         # simulate uncorrelated random scores
         y1 = np.random.normal(loc=y1m, scale=y1s, size=1)
