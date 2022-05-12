@@ -1,3 +1,4 @@
+import numpy as np
 
 
 def get_random_mos(y1m, y1s, y2m, y2s, y3m, y3s, corr_trgt=0):
