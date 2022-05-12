@@ -65,4 +65,5 @@ loss3 = tf.math.reduce_mean(tf.math.abs(y3hat - y3mos))
 
 print("MAE:", loss1, loss2, loss3)
 
-y_rho = np.corrcoef(np.c_[y1hat, y2hat, y3hat], rowvar=False)
+y_rho = np.corrcoef(np.c_[y1hat.numpy(), y2hat.numpy(), y3hat.numpy()], rowvar=False)
+print(y_rho)
