@@ -298,23 +298,16 @@ def generator_trainingset(num_draws: int = 16384):
         # pick one of the three targets
         ok = np.random.choice(range(3), size=1)[0]
         by = y1mos if ok == 0 else y2mos if ok == 1 else y3mos
+        byi, byj = by[idxi], byj[idxi]
         # swap if needed
-        cuti, cutj = by[idxi].mean(), by[idxj].mean()
-        if cuti < cutj:
-            cuti, cutj = cutj, cuti
-            bi, bj = bj, bi
+        if byi.mean() < byj.mean():
+            byi, byj = byj, byi
             idxi, idxj = idxj, idxi
         # draw positive example
-        wi = by[idxi] > cuti
-        wi = wi / wi.sum()
-        if np.isnan(wi).any():
-            wi = by[idxi] / by[idxi].sum()
+        wi = byi / byi.sum()
         i = np.random.choice(idxi, p=wi, size=1)[0]
         # draw negative example
-        wj = by[idxj] > cuti
-        wj = wj / wj.sum()
-        if np.isnan(wi).any():
-            wj = (7.0 - by[idxj]) / by[idxj].sum()
+        wj = (7.0 - byj) / byj.sum()
         j = np.random.choice(idxj, p=wj, size=1)[0]
 
         # merge features
@@ -372,23 +365,16 @@ def generator_validationset(num_draws=16384):
         # pick one of the three targets
         ok = np.random.choice(range(3), size=1)[0]
         by = y1mos if ok == 0 else y2mos if ok == 1 else y3mos
+        byi, byj = by[idxi], byj[idxi]
         # swap if needed
-        cuti, cutj = by[idxi].mean(), by[idxj].mean()
-        if cuti < cutj:
-            cuti, cutj = cutj, cuti
-            bi, bj = bj, bi
+        if byi.mean() < byj.mean():
+            byi, byj = byj, byi
             idxi, idxj = idxj, idxi
         # draw positive example
-        wi = by[idxi] > cuti
-        wi = wi / wi.sum()
-        if np.isnan(wi).any():
-            wi = by[idxi] / by[idxi].sum()
+        wi = byi / byi.sum()
         i = np.random.choice(idxi, p=wi, size=1)[0]
         # draw negative example
-        wj = by[idxj] > cuti
-        wj = wj / wj.sum()
-        if np.isnan(wi).any():
-            wj = (7.0 - by[idxj]) / by[idxj].sum()
+        wj = (7.0 - byj) / byj.sum()
         j = np.random.choice(idxj, p=wj, size=1)[0]
 
         # merge features
@@ -419,7 +405,7 @@ ds_valid = tf.data.Dataset.from_generator(
         },
         tf.TensorSpec(shape=(9), dtype=tf.float32, name="targets"),
     )
-).batch(batch_size).prefetch(1)
+).batch(16384)
 
 xy_valid = list(ds_valid)[0]  # generate once!
 
