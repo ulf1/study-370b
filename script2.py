@@ -292,9 +292,26 @@ def get_random_mos(y1m, y1s, y2m, y2s, y3m, y3s, corr_trgt=0):
 def generator_trainingset(num_draws: int = 16384):
     for _ in range(num_draws):
         # draw example IDs i,j from buckets
-        i, j = np.random.choice(range(36), size=2)
-        i = np.random.choice(bucket_indicies[i], size=1)[0]
-        j = np.random.choice(bucket_indicies[j], size=1)[0]
+        bi, bj = np.random.choice(range(36), size=2)
+        idxi = bucket_indicies[bi]
+        idxj = bucket_indicies[bj]
+        # pick one of the three targets
+        ok = np.random.choice(range(3), size=1)[0]
+        by = y1mos if ok == 0 else y2mos if ok == 1 else y3mos
+        # swap if needed
+        cuti, cutj = by[idxi].mean(), by[idxj].mean()
+        if cuti < cutj:
+            cuti, cutj = cutj, cuti
+            bi, bj = bj, bi
+            idxi, idxj = idxj, idxi
+        # draw positive example
+        wi = by[idxi] > cuti
+        wi = wi / wi.sum()
+        i = np.random.choice(idxi, p=wi, size=1)[0]
+        # draw negative example
+        wj = by[idxj] > cuti
+        wj = wj / wj.sum()
+        j = np.random.choice(idxj, p=wj, size=1)[0]
 
         # merge features
         x0pos = np.hstack(
@@ -345,10 +362,26 @@ ds_train = tf.data.Dataset.from_generator(
 def generator_validationset(num_draws=16384):
     for _ in range(num_draws):
         # draw example IDs i,j from buckets
-        i, j = np.random.choice(range(36), size=2)
-        i = np.random.choice(bucket_indicies[i], size=1)[0]
-        j = np.random.choice(bucket_indicies[j], size=1)[0]
-        # i, j
+        bi, bj = np.random.choice(range(36), size=2)
+        idxi = bucket_indicies[bi]
+        idxj = bucket_indicies[bj]
+        # pick one of the three targets
+        ok = np.random.choice(range(3), size=1)[0]
+        by = y1mos if ok == 0 else y2mos if ok == 1 else y3mos
+        # swap if needed
+        cuti, cutj = by[idxi].mean(), by[idxj].mean()
+        if cuti < cutj:
+            cuti, cutj = cutj, cuti
+            bi, bj = bj, bi
+            idxi, idxj = idxj, idxi
+        # draw positive example
+        wi = by[idxi] > cuti
+        wi = wi / wi.sum()
+        i = np.random.choice(idxi, p=wi, size=1)[0]
+        # draw negative example
+        wj = by[idxj] > cuti
+        wj = wj / wj.sum()
+        j = np.random.choice(idxj, p=wj, size=1)[0]
 
         # merge features
         x0pos = np.hstack(
@@ -379,6 +412,8 @@ ds_valid = tf.data.Dataset.from_generator(
         tf.TensorSpec(shape=(9), dtype=tf.float32, name="targets"),
     )
 ).batch(batch_size).prefetch(1)
+
+xy_valid = list(ds_valid)[0]  # generate once!
 
 
 # Build the Scoring Model
@@ -562,7 +597,7 @@ model = build_siamese_net(
 
 history = model.fit(
     ds_train, 
-    validation_data=ds_valid,
+    validation_data=xy_valid,
     callbacks=callbacks,
     epochs=500,
 )
