@@ -5,6 +5,7 @@ import json
 import gc
 import argparse
 from featureeng import preprocessing
+from uitls import get_random_mos
 
 
 parser = argparse.ArgumentParser()
@@ -52,9 +53,8 @@ for idxm in range(6):
 
 
 # Feature Engineering
-# preprocess all examples
 feats1, feats2, feats3, feats4, feats5, feats6 = preprocessing(texts)
-# delete_models()
+
 
 print("Number of features")
 print(f"{'Num SBert':>20s}: {feats1[0].shape[0]}")
@@ -67,25 +67,6 @@ print(f"{'Morph./lexemes':>20s}: {feats6[0].shape[0]}")
 
 
 # Dataset Generator for Siamese Net
-def get_random_mos(y1m, y1s, y2m, y2s, y3m, y3s, corr_trgt=0):
-    if corr_trgt == 0:
-        # simulate uncorrelated random scores
-        y1 = np.random.normal(loc=y1m, scale=y1s, size=1)
-        y2 = np.random.normal(loc=y2m, scale=y2s, size=1)
-        y3 = np.random.normal(loc=y3m, scale=y3s, size=1)
-        y1 = np.maximum(1.0, np.minimum(7.0, y1))[0]
-        y2 = np.maximum(1.0, np.minimum(7.0, y2))[0]
-        y3 = np.maximum(1.0, np.minimum(7.0, y3))[0]
-    elif corr_trgt == 1:
-        # simulate correlated random scores
-        Y = np.random.standard_normal((1, 3))
-        Y = np.dot(Y, np.linalg.cholesky(y_rho).T)[0]
-        y1 = np.maximum(1.0, np.minimum(7.0, Y[0] * y1s + y1m))
-        y2 = np.maximum(1.0, np.minimum(7.0, Y[1] * y2s + y2m))
-        y3 = np.maximum(1.0, np.minimum(7.0, Y[2] * y3s + y3m))
-    return y1, y2, y3
-
-
 def draw_example_index(bucket_indicies):
     # draw example IDs i,j from buckets
     bi, bj = np.random.choice(range(36), size=2)
@@ -208,7 +189,7 @@ xy_valid = list(ds_valid)[0]  # generate once!
 
 # Build the Scoring Model
 def build_scoring_model(dim_features: int, 
-                        n_units=64, activation="gelu", dropout=0.4):
+                        n_units=32, activation="gelu", dropout=0.4):
     # the input tensor
     inputs = tf.keras.Input(shape=(dim_features,), name="inputs")
 
@@ -225,36 +206,23 @@ def build_scoring_model(dim_features: int,
         dropout, name="linear_reduce_dropout")(x)
 
     # Dense + 4.0
-    out1_mos = tf.keras.layers.Dense(
-        units=1, use_bias=False,
+    mos = tf.keras.layers.Dense(
+        units=3, use_bias=False,
         kernel_initializer='glorot_uniform',
     )(x)
-    out1_mos = tf.keras.layers.Lambda(
-        lambda s: s + tf.constant(4.0), name='mos1'
-    )(out1_mos)
+    mos = tf.keras.layers.Dense(
+        units=3, use_bias=False,
+        kernel_initializer='glorot_uniform',
+    )(mos)
+    mos = tf.keras.layers.Lambda(
+        lambda s: s + tf.constant(4.0), name='mos'
+    )(mos)
 
-    # Dense + 4.0
-    out2_mos = tf.keras.layers.Dense(
-        units=1, use_bias=False,
-        kernel_initializer='glorot_uniform',
-    )(x)
-    out2_mos = tf.keras.layers.Lambda(
-        lambda s: s + tf.constant(4.0), name='mos2'
-    )(out2_mos)
-
-    # Dense + 4.0
-    out3_mos = tf.keras.layers.Dense(
-        units=1, use_bias=False,
-        kernel_initializer='glorot_uniform',
-    )(x)
-    out3_mos = tf.keras.layers.Lambda(
-        lambda s: s + tf.constant(4.0), name='mos3'
-    )(out3_mos)
 
     # Function API model
     model = tf.keras.Model(
         inputs=[inputs],
-        outputs=[out1_mos, out2_mos, out3_mos, x],
+        outputs=[mos, x],
         name="scoring_model"
     )
     # done
@@ -305,6 +273,7 @@ def loss2_mse_diffs(y_true, y_pred):
         (y_true[:, 8] - (y_pred[:, 2] - y_pred[:, 5])) / 6.0, 2))
     return loss
 
+
 def loss3_mse_target(y_true, y_pred):
     """ MSE loss on positive or negative noise targets """
     # norm to [0,1] by dividing by 6
@@ -318,7 +287,7 @@ def loss3_mse_target(y_true, y_pred):
 
 
 def build_siamese_net(dim_features: int, 
-                      n_units=64, activation="gelu", dropout=0.4):
+                      n_units=32, activation="gelu", dropout=0.4):
     # the input tensors
     inp_pos = tf.keras.Input(shape=(dim_features,), name='inp_pos')
     inp_neg = tf.keras.Input(shape=(dim_features,), name='inp_neg')
@@ -331,8 +300,8 @@ def build_siamese_net(dim_features: int,
         dropout=dropout)
 
     # predict examples for each input
-    y1_pos, y2_pos, y3_pos, repr_pos = scorer(inp_pos)
-    y1_neg, y2_neg, y3_neg, repr_neg = scorer(inp_neg)
+    y_pos, repr_pos = scorer(inp_pos)
+    y_neg, repr_neg = scorer(inp_neg)
 
     # Function API model
     model = tf.keras.Model(
@@ -341,8 +310,7 @@ def build_siamese_net(dim_features: int,
             'inp_neg': inp_neg,
         },
         outputs=tf.keras.backend.concatenate([
-            y1_pos, y2_pos, y3_pos,
-            y1_neg, y2_neg, y3_neg,
+            y_pos, y_neg,
             repr_pos, repr_neg
         ], axis=1),
         name="scorer_contrast"
@@ -356,7 +324,7 @@ def build_siamese_net(dim_features: int,
             amsgrad=True  # Reddi et al, 2018, p.5-6
         ),
         loss=[loss1_rank_triplet, loss2_mse_diffs, loss3_mse_target],
-        loss_weights=[0.5, 0.1, 0.4],
+        loss_weights=[0.5, 0.25, 0.25],
         metrics=[loss1_rank_triplet, loss2_mse_diffs, loss3_mse_target],
     )
 
@@ -382,7 +350,7 @@ callbacks = [
 
 
 model = build_siamese_net(
-    dim_features, n_units=64, activation="gelu", dropout=0.4)
+    dim_features, n_units=32, activation="gelu", dropout=0.4)
 
 
 history = model.fit(
