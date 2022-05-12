@@ -289,26 +289,41 @@ def get_random_mos(y1m, y1s, y2m, y2s, y3m, y3s, corr_trgt=0):
     return y1, y2, y3
 
 
+def draw_example_index(bucket_indicies):
+    # draw example IDs i,j from buckets
+    bi, bj = np.random.choice(range(36), size=2)
+    idxi = bucket_indicies[bi]
+    idxj = bucket_indicies[bj]
+    # pick one of the three targets
+    ok = np.random.choice(range(3), size=1)[0]
+    by = y1mos if ok == 0 else y2mos if ok == 1 else y3mos
+    byi, byj = by[idxi], by[idxj]
+    # swap if needed
+    cuti, cutj = byi.mean(), byj.mean()
+    if cuti < cutj:
+        cuti, cutj = cutj, cuti
+        byi, byj = byj, byi
+        idxi, idxj = idxj, idxi
+    # draw positive example
+    wi = byi >= cuti
+    wi = wi / wi.sum()
+    if np.isnan(wi).any():
+        wi = byi / byi.sum()
+    i = np.random.choice(idxi, p=wi, size=1)[0]
+    # draw negative example
+    wj = byj < cutj
+    wj = wj / wj.sum()
+    if np.isnan(wj).any():
+        wj = (7.0 - byj) / byj.sum()
+    j = np.random.choice(idxj, p=wj, size=1)[0]
+    # done
+    return i, j
+
+
 def generator_trainingset(num_draws: int = 16384):
     for _ in range(num_draws):
         # draw example IDs i,j from buckets
-        bi, bj = np.random.choice(range(36), size=2)
-        idxi = bucket_indicies[bi]
-        idxj = bucket_indicies[bj]
-        # pick one of the three targets
-        ok = np.random.choice(range(3), size=1)[0]
-        by = y1mos if ok == 0 else y2mos if ok == 1 else y3mos
-        byi, byj = by[idxi], byj[idxi]
-        # swap if needed
-        if byi.mean() < byj.mean():
-            byi, byj = byj, byi
-            idxi, idxj = idxj, idxi
-        # draw positive example
-        wi = byi / byi.sum()
-        i = np.random.choice(idxi, p=wi, size=1)[0]
-        # draw negative example
-        wj = (7.0 - byj) / byj.sum()
-        j = np.random.choice(idxj, p=wj, size=1)[0]
+        i, j = draw_example_index(bucket_indicies)
 
         # merge features
         x0pos = np.hstack(
@@ -359,23 +374,7 @@ ds_train = tf.data.Dataset.from_generator(
 def generator_validationset(num_draws=16384):
     for _ in range(num_draws):
         # draw example IDs i,j from buckets
-        bi, bj = np.random.choice(range(36), size=2)
-        idxi = bucket_indicies[bi]
-        idxj = bucket_indicies[bj]
-        # pick one of the three targets
-        ok = np.random.choice(range(3), size=1)[0]
-        by = y1mos if ok == 0 else y2mos if ok == 1 else y3mos
-        byi, byj = by[idxi], byj[idxi]
-        # swap if needed
-        if byi.mean() < byj.mean():
-            byi, byj = byj, byi
-            idxi, idxj = idxj, idxi
-        # draw positive example
-        wi = byi / byi.sum()
-        i = np.random.choice(idxi, p=wi, size=1)[0]
-        # draw negative example
-        wj = (7.0 - byj) / byj.sum()
-        j = np.random.choice(idxj, p=wj, size=1)[0]
+        i, j = draw_example_index(bucket_indicies)
 
         # merge features
         x0pos = np.hstack(
