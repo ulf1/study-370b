@@ -310,8 +310,13 @@ def generator_trainingset(num_draws: int = 16384):
             y1mos[j], y1std[j], y2mos[j], y2std[j], y3mos[j], y3std[j], 
             corr_trgt=args.corr_trgt)
 
+        # compute differences
+        d1 = y1mos[i] - y1mos[j]
+        d2 = y2mos[i] - y2mos[j]
+        d3 = y3mos[i] - y3mos[j]
+
         # concat targets
-        targets = [y1pos, y2pos, y3pos, y1neg, y2neg, y3neg]
+        targets = [y1pos, y2pos, y3pos, y1neg, y2neg, y3neg, d1, d2, d3]
         yield {
             "inp_pos": tf.cast(x0pos, dtype=tf.float32, name="inp_pos"),
             "inp_neg": tf.cast(x0neg, dtype=tf.float32, name="inp_neg"),
@@ -331,7 +336,7 @@ ds_train = tf.data.Dataset.from_generator(
             "inp_pos": tf.TensorSpec(shape=(dim_features), dtype=tf.float32, name="inp_pos"),
             "inp_neg": tf.TensorSpec(shape=(dim_features), dtype=tf.float32, name="inp_neg"),
         },
-        tf.TensorSpec(shape=(6), dtype=tf.float32, name="targets"),
+        tf.TensorSpec(shape=(9), dtype=tf.float32, name="targets"),
     )
 ).batch(batch_size).prefetch(1)
 
@@ -351,8 +356,13 @@ def generator_validationset(num_draws=16384):
         x0neg = np.hstack(
             [feats1[j], feats2[j], feats3[j], feats4[j], feats5[j], feats6[j]])
 
+        # compute differences
+        d1 = y1mos[i] - y1mos[j]
+        d2 = y2mos[i] - y2mos[j]
+        d3 = y3mos[i] - y3mos[j]
+
         # concat targets
-        targets = [y1mos[i], y2mos[i], y3mos[i], y1mos[j], y2mos[j], y3mos[j]]
+        targets = [y1mos[i], y2mos[i], y3mos[i], y1mos[j], y2mos[j], y3mos[j], d1, d2, d3]
         yield {
             "inp_pos": tf.cast(x0pos, dtype=tf.float32, name="inp_pos"),
             "inp_neg": tf.cast(x0neg, dtype=tf.float32, name="inp_neg"),
@@ -366,7 +376,7 @@ ds_valid = tf.data.Dataset.from_generator(
             "inp_pos": tf.TensorSpec(shape=(dim_features), dtype=tf.float32, name="inp_pos"),
             "inp_neg": tf.TensorSpec(shape=(dim_features), dtype=tf.float32, name="inp_neg"),
         },
-        tf.TensorSpec(shape=(6), dtype=tf.float32, name="targets"),
+        tf.TensorSpec(shape=(9), dtype=tf.float32, name="targets"),
     )
 ).batch(batch_size).prefetch(1)
 
@@ -419,7 +429,7 @@ def build_scoring_model(dim_features: int,
     # Function API model
     model = tf.keras.Model(
         inputs=[inputs],
-        outputs=[x, out1_mos, out2_mos, out3_mos],
+        outputs=[out1_mos, out2_mos, out3_mos, x],
         name="scoring_model"
     )
     # done
@@ -444,24 +454,31 @@ def cosine_distance_normalized(a, b, tol=1e-8):
 
 def loss1_rank_triplet(y_true, y_pred):
     """ Triplet ranking loss between last representation layers """
-    # compute margins from target scores
-    m1 = tf.math.abs(y_true[:, 0] - y_true[:, 3])
-    m2 = tf.math.abs(y_true[:, 1] - y_true[:, 4])
-    m3 = tf.math.abs(y_true[:, 2] - y_true[:, 5])
-    margin = tf.math.maximum(m1, tf.math.maximum(m2, m3))
+    # get margins from average target scores
+    margin1 = tf.math.abs(y_true[:, 6])
+    margin2 = tf.math.abs(y_true[:, 7])
+    margin3 = tf.math.abs(y_true[:, 8])
     # read model outputs
-    n = (y_pred.shape[1] - 6) // 2
-    repr_pos = y_pred[:, 6:(6 + n)]
-    repr_neg = y_pred[:, (6 + n):(6 + n * 2)]
+    n = (y_pred.shape[1] - 9) // 2
+    repr_pos = y_pred[:, 9:(9 + n)]
+    repr_neg = y_pred[:, (9 + n):(9 + n * 2)]
     # Triplet ranking loss between last representation layers
-    # loss = cosine_distance_normalized(repr_pos, repr_aug)
-    loss = (margin - cosine_distance_normalized(repr_pos, repr_neg))
-    loss = tf.reduce_mean(tf.math.maximum(0.0, loss))
+    dist = cosine_distance_normalized(repr_pos, repr_neg)
+    loss1 = tf.reduce_mean(tf.math.maximum(0.0, margin1 - dist))
+    loss2 = tf.reduce_mean(tf.math.maximum(0.0, margin2 - dist))
+    loss3 = tf.reduce_mean(tf.math.maximum(0.0, margin3 - dist))
+    return loss1 + loss2 + loss3
+
+
+def loss2_mse_diffs(y_true, y_pred):
+    """ MSE loss between actual and predicted margins btw. pos & neg. ex """
+    loss = tf.reduce_mean(tf.math.pow(y_true[:, 6] - (y_pred[:, 0] - y_pred[:, 3]), 2))
+    loss += tf.reduce_mean(tf.math.pow(y_true[:, 7] - (y_pred[:, 1] - y_pred[:, 4]), 2))
+    loss += tf.reduce_mean(tf.math.pow(y_true[:, 8] - (y_pred[:, 2] - y_pred[:, 5]), 2))
     return loss
 
-
-def loss2_mse_target(y_true, y_pred):
-    """ MAE loss on positive or negative example if target exists """
+def loss3_mse_target(y_true, y_pred):
+    """ MSE loss on positive or negative noise targets """
     loss  = tf.reduce_mean(tf.math.pow(y_true[:, 0] - y_pred[:, 0], 2))
     loss += tf.reduce_mean(tf.math.pow(y_true[:, 1] - y_pred[:, 1], 2))
     loss += tf.reduce_mean(tf.math.pow(y_true[:, 2] - y_pred[:, 2], 2))
@@ -509,9 +526,9 @@ def build_siamese_net(dim_features: int,
             beta_1=.9, beta_2=.999, epsilon=1e-7,  # Kingma and Ba, 2014, p.2
             amsgrad=True  # Reddi et al, 2018, p.5-6
         ),
-        loss=[loss1_rank_triplet, loss2_mse_target],
-        loss_weights=[0.75, 0.25],
-        metrics=[loss1_rank_triplet, loss2_mse_target],
+        loss=[loss1_rank_triplet, loss2_mse_diffs, loss2_mse_target],
+        loss_weights=[0.6, 0.2, 0.2],
+        metrics=[loss1_rank_triplet, loss2_mse_diffs, loss2_mse_target],
     )
 
     return model
