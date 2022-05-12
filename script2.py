@@ -4,7 +4,7 @@ import tensorflow as tf
 import json
 import gc
 import argparse
-from featureeng import preprocessing, delete_models
+from featureeng import preprocessing
 
 
 parser = argparse.ArgumentParser()
@@ -54,7 +54,7 @@ for idxm in range(6):
 # Feature Engineering
 # preprocess all examples
 feats1, feats2, feats3, feats4, feats5, feats6 = preprocessing(texts)
-delete_models()
+# delete_models()
 
 print("Number of features")
 print(f"{'Num SBert':>20s}: {feats1[0].shape[0]}")

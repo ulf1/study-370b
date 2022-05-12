@@ -6,7 +6,7 @@ import epitran
 import ipasymbols
 import sfst_transduce
 import re
-import gc
+# import gc
 from collections import Counter
 import string
 import numpy as np
@@ -192,10 +192,10 @@ def preprocessing(texts):
     return feats1, feats2, feats3, feats4, feats5, feats6
 
 
-def delete_models():
-    # free memory
-    del model_sbert
-    del model_trankit
-    del model_epi
-    del model_fst
-    gc.collect()
+# def delete_models():
+#     # free memory
+#     del model_sbert
+#     del model_trankit
+#     del model_epi
+#     del model_fst
+#     gc.collect()

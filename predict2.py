@@ -1,5 +1,5 @@
 import tensorflow as tf
-from featureeng import preprocessing, delete_models
+from featureeng import preprocessing
 import pandas as pd
 import gc
 import numpy as np
@@ -21,7 +21,7 @@ gc.collect()
 
 # Feature engineering
 feats1, feats2, feats3, feats4, feats5, feats6 = preprocessing(texts)
-delete_models()
+# delete_models()
 
 # Concat
 xinputs = np.hstack([feats1, feats2, feats3, feats4, feats5, feats6])
@@ -64,3 +64,5 @@ loss2 = tf.math.reduce_mean(tf.math.abs(y2hat - y2mos))
 loss3 = tf.math.reduce_mean(tf.math.abs(y3hat - y3mos))
 
 print("MAE:", loss1, loss2, loss3)
+
+y_rho = np.corrcoef(np.c_[y1hat, y2hat, y3hat], rowvar=False)
