@@ -458,7 +458,7 @@ def loss1_rank_triplet(y_true, y_pred):
     margin1 = tf.math.abs(y_true[:, 6]) / 6.0
     margin2 = tf.math.abs(y_true[:, 7]) / 6.0
     margin3 = tf.math.abs(y_true[:, 8]) / 6.0
-    margin = (margin1 + margin2 + margin3) / 3.0
+    margin = tf.math.maximum(tf.math.maximum(margin1, margin2), margin3)
     # read model outputs
     n = (y_pred.shape[1] - 9) // 2
     repr_pos = y_pred[:, 9:(9 + n)]
