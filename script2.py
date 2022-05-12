@@ -307,10 +307,14 @@ def generator_trainingset(num_draws: int = 16384):
         # draw positive example
         wi = by[idxi] > cuti
         wi = wi / wi.sum()
+        if np.isnan(wi).any():
+            wi = by[idxi] / by[idxi].sum()
         i = np.random.choice(idxi, p=wi, size=1)[0]
         # draw negative example
         wj = by[idxj] > cuti
         wj = wj / wj.sum()
+        if np.isnan(wi).any():
+            wj = (7.0 - by[idxj]) / by[idxj].sum()
         j = np.random.choice(idxj, p=wj, size=1)[0]
 
         # merge features
@@ -377,10 +381,14 @@ def generator_validationset(num_draws=16384):
         # draw positive example
         wi = by[idxi] > cuti
         wi = wi / wi.sum()
+        if np.isnan(wi).any():
+            wi = by[idxi] / by[idxi].sum()
         i = np.random.choice(idxi, p=wi, size=1)[0]
         # draw negative example
         wj = by[idxj] > cuti
         wj = wj / wj.sum()
+        if np.isnan(wi).any():
+            wj = (7.0 - by[idxj]) / by[idxj].sum()
         j = np.random.choice(idxj, p=wj, size=1)[0]
 
         # merge features
