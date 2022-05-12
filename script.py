@@ -45,14 +45,6 @@ print(f"{'Consonant cluster':>20s}: {feats5[0].shape[0]}")
 print(f"{'Morph./lexemes':>20s}: {feats6[0].shape[0]}")
 
 
-# free memory
-del model_sbert
-del model_trankit
-del model_epi
-del model_fst
-gc.collect()
-
-
 # Training set
 def generator_trainingset(num_bootstrap: int = 64):
     num_data = len(feats1)
