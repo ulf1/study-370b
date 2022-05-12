@@ -526,9 +526,9 @@ def build_siamese_net(dim_features: int,
             beta_1=.9, beta_2=.999, epsilon=1e-7,  # Kingma and Ba, 2014, p.2
             amsgrad=True  # Reddi et al, 2018, p.5-6
         ),
-        loss=[loss1_rank_triplet, loss2_mse_diffs, loss2_mse_target],
+        loss=[loss1_rank_triplet, loss2_mse_diffs, loss3_mse_target],
         loss_weights=[0.6, 0.2, 0.2],
-        metrics=[loss1_rank_triplet, loss2_mse_diffs, loss2_mse_target],
+        metrics=[loss1_rank_triplet, loss2_mse_diffs, loss3_mse_target],
     )
 
     return model
