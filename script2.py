@@ -458,16 +458,15 @@ def loss1_rank_triplet(y_true, y_pred):
     margin1 = tf.math.abs(y_true[:, 6]) / 6.0
     margin2 = tf.math.abs(y_true[:, 7]) / 6.0
     margin3 = tf.math.abs(y_true[:, 8]) / 6.0
+    margin = (margin1 + margin2 + margin3) / 3.0
     # read model outputs
     n = (y_pred.shape[1] - 9) // 2
     repr_pos = y_pred[:, 9:(9 + n)]
     repr_neg = y_pred[:, (9 + n):(9 + n * 2)]
     # Triplet ranking loss between last representation layers
     dist = cosine_distance_normalized(repr_pos, repr_neg)
-    loss1 = tf.reduce_mean(tf.math.maximum(0.0, margin1 - dist))
-    loss2 = tf.reduce_mean(tf.math.maximum(0.0, margin2 - dist))
-    loss3 = tf.reduce_mean(tf.math.maximum(0.0, margin3 - dist))
-    return loss1 + loss2 + loss3
+    loss = tf.reduce_mean(tf.math.maximum(0.0, margin - dist))
+    return loss
 
 
 def loss2_mse_diffs(y_true, y_pred):
@@ -532,7 +531,7 @@ def build_siamese_net(dim_features: int,
             amsgrad=True  # Reddi et al, 2018, p.5-6
         ),
         loss=[loss1_rank_triplet, loss2_mse_diffs, loss3_mse_target],
-        loss_weights=[0.6, 0.2, 0.2],
+        loss_weights=[0.5, 0.1, 0.4],
         metrics=[loss1_rank_triplet, loss2_mse_diffs, loss3_mse_target],
     )
 
