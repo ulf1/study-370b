@@ -6,10 +6,12 @@ import gc
 import argparse
 from featureeng import preprocessing
 from utils import get_random_mos
+import keras_cor as kcor
 
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--corr-trgt', type=int, default=0)
+parser.add_argument('--corr-trgt', type=int, default=1)
+parser.add_argument('--corr-regul', type=int, default=1)
 args = parser.parse_args()
 
 
@@ -23,18 +25,23 @@ y2mos = df["MOS_Understandability"].values
 y2std = df["Std_Understandability"].values
 y3mos = df["MOS_Lexical_difficulty"].values
 y3std = df["Std_Lexical_difficulty"].values
-
-# Correlation between outputs
-y_rho = np.corrcoef(np.c_[y1mos, y2mos, y3mos], rowvar=False)
-
 # free memory
 del df
 gc.collect()
 
+# Correlation between outputs
+y_rho = np.corrcoef(np.c_[y1mos, y2mos, y3mos], rowvar=False)
+
+# Target correlations
+target_corr = []
+for i in range(y_rho.shape[0]):
+    for j in range(1 + i, y_rho.shape[1]):
+        target_corr.append(y_rho[i, j])
+target_corr = tf.stack(target_corr)
+
 
 # Feature Engineering
 feats1, feats2, feats3, feats4, feats5, feats6 = preprocessing(texts)
-
 
 print("Number of features")
 print(f"{'Num SBert':>20s}: {feats1[0].shape[0]}")
@@ -125,6 +132,8 @@ mos = tf.keras.layers.Dense(
 mos = tf.keras.layers.Lambda(
     lambda s: s + tf.constant(4.0), name='mos'
 )(mos)
+if args.corr_regul == 1:
+    mos = kcor.CorrOutputsRegularizer(target_corr, cor_rate=0.1)(mos)
 
 # Function API model
 model = tf.keras.Model(

@@ -6,10 +6,12 @@ import gc
 import argparse
 from featureeng import preprocessing
 from utils import get_random_mos
+import keras_cor as kcor
 
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--corr-trgt', type=int, default=0)
+parser.add_argument('--corr-trgt', type=int, default=1)
+parser.add_argument('--corr-regul', type=int, default=1)
 args = parser.parse_args()
 
 
@@ -23,13 +25,20 @@ y2mos = df["MOS_Understandability"].values
 y2std = df["Std_Understandability"].values
 y3mos = df["MOS_Lexical_difficulty"].values
 y3std = df["Std_Lexical_difficulty"].values
+# free memory
+del df
+gc.collect()
 
 # Correlation between outputs
 y_rho = np.corrcoef(np.c_[y1mos, y2mos, y3mos], rowvar=False)
 
-# free memory
-del df
-gc.collect()
+# Target correlations
+target_corr = []
+for i in range(y_rho.shape[0]):
+    for j in range(1 + i, y_rho.shape[1]):
+        target_corr.append(y_rho[i, j])
+target_corr = tf.stack(target_corr)
+
 
 
 # Masks for 6x6 buckets
@@ -189,7 +198,8 @@ xy_valid = list(ds_valid)[0]  # generate once!
 
 # Build the Scoring Model
 def build_scoring_model(dim_features: int, 
-                        n_units=32, activation="gelu", dropout=0.4):
+                        n_units=32, activation="gelu", dropout=0.4,
+                        target_corr=None, cor_rate=0.1):
     # the input tensor
     inputs = tf.keras.Input(shape=(dim_features,), name="inputs")
 
@@ -217,7 +227,8 @@ def build_scoring_model(dim_features: int,
     mos = tf.keras.layers.Lambda(
         lambda s: s + tf.constant(4.0), name='mos'
     )(mos)
-
+    if args.corr_regul == 1:
+        mos = kcor.CorrOutputsRegularizer(target_corr, cor_rate=cor_rate)(mos)
 
     # Function API model
     model = tf.keras.Model(
@@ -294,7 +305,8 @@ def loss_total(y_true, y_pred):
 
 
 def build_siamese_net(dim_features: int, 
-                      n_units=32, activation="gelu", dropout=0.4):
+                      n_units=32, activation="gelu", dropout=0.4,
+                      target_corr=None, cor_rate=0.1):
     # the input tensors
     inp_pos = tf.keras.Input(shape=(dim_features,), name='inp_pos')
     inp_neg = tf.keras.Input(shape=(dim_features,), name='inp_neg')
@@ -304,7 +316,10 @@ def build_siamese_net(dim_features: int,
         dim_features=dim_features,
         n_units=n_units,
         activation=activation,
-        dropout=dropout)
+        dropout=dropout,
+        target_corr=target_corr, 
+        cor_rate=cor_rate
+    )
 
     # predict examples for each input
     y_pos, repr_pos = scorer(inp_pos)
@@ -358,7 +373,8 @@ callbacks = [
 
 
 model = build_siamese_net(
-    dim_features, n_units=32, activation="gelu", dropout=0.4)
+    dim_features, n_units=32, activation="gelu", dropout=0.4,
+    target_corr=target_corr, cor_rate=0.1)
 
 
 history = model.fit(
