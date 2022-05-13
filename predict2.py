@@ -36,12 +36,16 @@ def loss2_mse_diffs(a,b):
 def loss3_mse_target(a,b):
     return 0.0
 
+def loss_total(a,b):
+    return 0.0
+
 model = tf.keras.models.load_model(
     "best-model-370b-siamese-1", 
     custom_objects={
         "loss1_rank_triplet": loss1_rank_triplet, 
         "loss2_mse_diffs": loss2_mse_diffs,
-        "loss3_mse_target": loss3_mse_target
+        "loss3_mse_target": loss3_mse_target,
+        "loss_total": loss_total
 })
 
 model_scoring = model.layers[2]

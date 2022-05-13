@@ -286,6 +286,13 @@ def loss3_mse_target(y_true, y_pred):
     return loss
 
 
+def loss_total(y_true, y_pred):
+    loss = .5 * loss1_rank_triplet(y_true, y_pred)
+    loss += .25 * loss2_mse_diffs(y_true, y_pred)
+    loss += .25 * loss3_mse_target(y_true, y_pred)
+    return loss
+
+
 def build_siamese_net(dim_features: int, 
                       n_units=32, activation="gelu", dropout=0.4):
     # the input tensors
@@ -323,9 +330,10 @@ def build_siamese_net(dim_features: int,
             beta_1=.9, beta_2=.999, epsilon=1e-7,  # Kingma and Ba, 2014, p.2
             amsgrad=True  # Reddi et al, 2018, p.5-6
         ),
-        loss=[loss1_rank_triplet, loss2_mse_diffs, loss3_mse_target],
-        loss_weights=[0.5, 0.25, 0.25],
-        metrics=[loss1_rank_triplet, loss2_mse_diffs, loss3_mse_target],
+        loss=[loss_total],
+        # loss=[loss1_rank_triplet, loss2_mse_diffs, loss3_mse_target],
+        # loss_weights=[0.5, 0.25, 0.25],  # Seems to have a TF2/Keras bug
+        metrics=[loss_total, loss1_rank_triplet, loss2_mse_diffs, loss3_mse_target],
     )
 
     return model
