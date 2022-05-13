@@ -125,10 +125,10 @@ mos = tf.keras.layers.Dense(
     units=3, use_bias=False,
     kernel_initializer='glorot_uniform',
 )(inputs)
-mos = tf.keras.layers.Dense(
-    units=3, use_bias=False,
-    kernel_initializer='glorot_uniform',
-)(mos)
+# mos = tf.keras.layers.Dense(
+#     units=3, use_bias=False,
+#     kernel_initializer='glorot_uniform',
+# )(mos)
 mos = tf.keras.layers.Lambda(
     lambda s: s + tf.constant(4.0), name='mos'
 )(mos)
