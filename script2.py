@@ -38,7 +38,7 @@ for i in range(y_rho.shape[0]):
     for j in range(1 + i, y_rho.shape[1]):
         target_corr.append(y_rho[i, j])
 target_corr = tf.stack(target_corr)
-
+target_corr = tf.cast(target_corr, dtype=tf.float32)
 
 
 # Masks for 6x6 buckets

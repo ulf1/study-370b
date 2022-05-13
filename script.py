@@ -38,7 +38,7 @@ for i in range(y_rho.shape[0]):
     for j in range(1 + i, y_rho.shape[1]):
         target_corr.append(y_rho[i, j])
 target_corr = tf.stack(target_corr)
-
+target_corr = tf.cast(target_corr, dtype=tf.float32)
 
 # Feature Engineering
 feats1, feats2, feats3, feats4, feats5, feats6 = preprocessing(texts)
