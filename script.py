@@ -153,7 +153,7 @@ callbacks = [
         restore_best_weights=True
     ),
     tf.keras.callbacks.ModelCheckpoint(
-        filepath=f"best-model-370b-{args.corr_trgt}",
+        filepath=f"best-model-370b-{args.corr_trgt}-{args.corr_regul}",
         monitor="val_loss",
         mode="min",
         save_best_only=True,
@@ -178,6 +178,6 @@ history = model.fit(
     epochs=500,
 )
 
-with open(f"best-model-370b-{args.corr_trgt}/history.json", 'w') as fp:
+with open(f"best-model-370b-{args.corr_trgt}-{args.corr_regul}/history.json", 'w') as fp:
     json.dump(history.history, fp)
 
