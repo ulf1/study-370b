@@ -32,13 +32,5 @@ rm SMOR-linux.zip
 ## Run experiments
 
 ```sh
-nohup python3 script.py --corr-trgt=1 --corr-regul=1 &
-nohup python3 script.py --corr-trgt=1 --corr-regul=0 &
-nohup python3 script.py --corr-trgt=0 --corr-regul=1 &
-nohup python3 script.py --corr-trgt=0 --corr-regul=0 &
-
-nohup python3 script2.py --corr-trgt=1 --corr-regul=1 &
-nohup python3 script2.py --corr-trgt=1 --corr-regul=0 &
-nohup python3 script2.py --corr-trgt=0 --corr-regul=1 &
-nohup python3 script2.py --corr-trgt=0 --corr-regul=0 &
+nohup bash run-all.sh &
 ```
