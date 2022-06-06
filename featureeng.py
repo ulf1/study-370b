@@ -55,7 +55,7 @@ MORPHTAGS = [
     "Degree=Pos", "Degree=Cmp", "Degree=Sup",
     "Polarity=Neg",
     "Mood=Ind", "Mood=Imp", "Mood=Sub",
-    "Tense=Pres", "Tense=Past",
+    "Tense=Pres", "Tense=Past", "Tense=Fut", "Tense=Imp", "Tense=Pqp", 
     "NumType=",  # any
     "Poss=",
     "Reflex=",
