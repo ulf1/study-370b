@@ -12,6 +12,7 @@ import keras_cor as kcor
 parser = argparse.ArgumentParser()
 parser.add_argument('--corr-trgt', type=int, default=1)
 parser.add_argument('--corr-regul', type=int, default=1)
+parser.add_argument('--batch-size', type=int, default=128)
 args = parser.parse_args()
 
 
@@ -104,13 +105,13 @@ def draw_example_index(bucket_indicies):
         wj = (7.0 - byj) / byj.sum()
     j = np.random.choice(idxj, p=wj, size=1)[0]
     # done
-    return i, j
+    return i, j, ok
 
 
 def generator_trainingset(num_draws: int = 65536):
     for _ in range(num_draws):
         # draw example IDs i,j from buckets
-        i, j = draw_example_index(bucket_indicies)
+        i, j, ok = draw_example_index(bucket_indicies)
 
         # merge features
         x0pos = np.hstack(
@@ -132,14 +133,12 @@ def generator_trainingset(num_draws: int = 65536):
         d3 = y3mos[i] - y3mos[j]
 
         # concat targets
-        targets = [y1pos, y2pos, y3pos, y1neg, y2neg, y3neg, d1, d2, d3]
+        targets = [y1pos, y2pos, y3pos, y1neg, y2neg, y3neg, d1, d2, d3, ok]
         yield {
             "inp_pos": tf.cast(x0pos, dtype=tf.float32, name="inp_pos"),
             "inp_neg": tf.cast(x0neg, dtype=tf.float32, name="inp_neg"),
         }, tf.constant(targets, dtype=tf.float32, name="targets")
 
-
-batch_size = 128
 
 dim_features = len(feats1[0]) + len(feats2[0]) + len(feats3[0]) + len(feats4[0]) + len(feats5[0]) + len(feats6[0])
 
@@ -154,14 +153,14 @@ ds_train = tf.data.Dataset.from_generator(
         },
         tf.TensorSpec(shape=(9), dtype=tf.float32, name="targets"),
     )
-).batch(batch_size).prefetch(1)
+).batch(args.batch_size).prefetch(1)
 
 
 # Validation set
 def generator_validationset(num_draws=65536):
     for _ in range(num_draws):
         # draw example IDs i,j from buckets
-        i, j = draw_example_index(bucket_indicies)
+        i, j, ok = draw_example_index(bucket_indicies)
 
         # merge features
         x0pos = np.hstack(
@@ -175,7 +174,7 @@ def generator_validationset(num_draws=65536):
         d3 = y3mos[i] - y3mos[j]
 
         # concat targets
-        targets = [y1mos[i], y2mos[i], y3mos[i], y1mos[j], y2mos[j], y3mos[j], d1, d2, d3]
+        targets = [y1mos[i], y2mos[i], y3mos[i], y1mos[j], y2mos[j], y3mos[j], d1, d2, d3, ok]
         yield {
             "inp_pos": tf.cast(x0pos, dtype=tf.float32, name="inp_pos"),
             "inp_neg": tf.cast(x0neg, dtype=tf.float32, name="inp_neg"),
@@ -259,10 +258,12 @@ def cosine_distance_normalized(a, b, tol=1e-8):
 def loss1_rank_triplet(y_true, y_pred):
     """ Triplet ranking loss between last representation layers """
     # the diffs must be normed to [0,1] by dividing by 6
-    margin1 = tf.math.abs(y_true[:, 6]) / 6.0
-    margin2 = tf.math.abs(y_true[:, 7]) / 6.0
-    margin3 = tf.math.abs(y_true[:, 8]) / 6.0
-    margin = tf.math.maximum(tf.math.maximum(margin1, margin2), margin3)
+    if ok == 0:
+        margin = tf.math.abs(y_true[:, 6]) / 6.0
+    elif ok == 1:
+        margin = tf.math.abs(y_true[:, 7]) / 6.0
+    elif ok == 2:
+        margin = tf.math.abs(y_true[:, 8]) / 6.0
     # read model outputs
     n = (y_pred.shape[1] - 9) // 2
     repr_pos = y_pred[:, 9:(9 + n)]
@@ -273,34 +274,30 @@ def loss1_rank_triplet(y_true, y_pred):
     return loss
 
 
-def loss2_mse_diffs(y_true, y_pred):
-    """ MSE loss between actual and predicted margins btw. pos & neg. ex """
-    # norm to [0,1] by dividing by 6
-    loss =  tf.reduce_mean(tf.math.pow(
-        (y_true[:, 6] - (y_pred[:, 0] - y_pred[:, 3])) / 6.0, 2))
-    loss += tf.reduce_mean(tf.math.pow(
-        (y_true[:, 7] - (y_pred[:, 1] - y_pred[:, 4])) / 6.0, 2))
-    loss += tf.reduce_mean(tf.math.pow(
-        (y_true[:, 8] - (y_pred[:, 2] - y_pred[:, 5])) / 6.0, 2))
-    return loss
-
-
-def loss3_mse_target(y_true, y_pred):
+def loss2_mse_target(y_true, y_pred):
     """ MSE loss on positive or negative noise targets """
     # norm to [0,1] by dividing by 6
-    loss  = tf.reduce_mean(tf.math.pow((y_true[:, 0] - y_pred[:, 0]) / 6.0, 2))
-    loss += tf.reduce_mean(tf.math.pow((y_true[:, 1] - y_pred[:, 1]) / 6.0, 2))
-    loss += tf.reduce_mean(tf.math.pow((y_true[:, 2] - y_pred[:, 2]) / 6.0, 2))
-    loss += tf.reduce_mean(tf.math.pow((y_true[:, 3] - y_pred[:, 3]) / 6.0, 2))
-    loss += tf.reduce_mean(tf.math.pow((y_true[:, 4] - y_pred[:, 4]) / 6.0, 2))
-    loss += tf.reduce_mean(tf.math.pow((y_true[:, 5] - y_pred[:, 5]) / 6.0, 2))
+    if ok == 0:
+        loss  = tf.reduce_mean(tf.math.pow((y_true[:, 1] - y_pred[:, 1]) / 6.0, 2))
+        loss += tf.reduce_mean(tf.math.pow((y_true[:, 4] - y_pred[:, 4]) / 6.0, 2))
+        loss += tf.reduce_mean(tf.math.pow((y_true[:, 2] - y_pred[:, 2]) / 6.0, 2))
+        loss += tf.reduce_mean(tf.math.pow((y_true[:, 5] - y_pred[:, 5]) / 6.0, 2))
+    elif ok == 1:
+        loss  = tf.reduce_mean(tf.math.pow((y_true[:, 0] - y_pred[:, 0]) / 6.0, 2))
+        loss += tf.reduce_mean(tf.math.pow((y_true[:, 3] - y_pred[:, 3]) / 6.0, 2))
+        loss += tf.reduce_mean(tf.math.pow((y_true[:, 2] - y_pred[:, 2]) / 6.0, 2))
+        loss += tf.reduce_mean(tf.math.pow((y_true[:, 5] - y_pred[:, 5]) / 6.0, 2))
+    elif ok == 2:
+        loss  = tf.reduce_mean(tf.math.pow((y_true[:, 0] - y_pred[:, 0]) / 6.0, 2))
+        loss += tf.reduce_mean(tf.math.pow((y_true[:, 3] - y_pred[:, 3]) / 6.0, 2))
+        loss += tf.reduce_mean(tf.math.pow((y_true[:, 1] - y_pred[:, 1]) / 6.0, 2))
+        loss += tf.reduce_mean(tf.math.pow((y_true[:, 4] - y_pred[:, 4]) / 6.0, 2))
     return loss
 
 
 def loss_total(y_true, y_pred):
-    loss = .5 * loss1_rank_triplet(y_true, y_pred)
-    loss += .25 * loss2_mse_diffs(y_true, y_pred)
-    loss += .25 * loss3_mse_target(y_true, y_pred)
+    loss = .75 * loss1_rank_triplet(y_true, y_pred)
+    loss += .25 * loss2_mse_target(y_true, y_pred)
     return loss
 
 
@@ -346,9 +343,9 @@ def build_siamese_net(dim_features: int,
             amsgrad=True  # Reddi et al, 2018, p.5-6
         ),
         loss=[loss_total],
-        # loss=[loss1_rank_triplet, loss2_mse_diffs, loss3_mse_target],
-        # loss_weights=[0.5, 0.25, 0.25],  # Seems to have a TF2/Keras bug
-        metrics=[loss_total, loss1_rank_triplet, loss2_mse_diffs, loss3_mse_target],
+        # loss=[loss1_rank_triplet, loss2_mse_target],
+        # loss_weights=[0.75, 0.25],  # Seems to have a TF2/Keras bug
+        metrics=[loss_total, loss1_rank_triplet, loss2_mse_target],
     )
 
     return model

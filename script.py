@@ -12,6 +12,7 @@ import keras_cor as kcor
 parser = argparse.ArgumentParser()
 parser.add_argument('--corr-trgt', type=int, default=1)
 parser.add_argument('--corr-regul', type=int, default=1)
+parser.add_argument('--batch-size', type=int, default=128)
 args = parser.parse_args()
 
 
@@ -72,7 +73,6 @@ def generator_trainingset(num_bootstrap: int = 64):
                 "outputs": tf.constant(outputs, dtype=tf.float32, name="outputs")
             }
 
-batch_size = 128
 
 dim_features = len(feats1[0]) + len(feats2[0]) + len(feats3[0]) + len(feats4[0]) + len(feats5[0]) + len(feats6[0])
 
@@ -88,7 +88,7 @@ ds_train = tf.data.Dataset.from_generator(
             "outputs": tf.TensorSpec(shape=(3), dtype=tf.float32, name="outputs")
         }
     )
-).batch(batch_size)
+).batch(args.batch_size)
 
 
 # Validation set
@@ -112,7 +112,7 @@ ds_valid = tf.data.Dataset.from_generator(
             "outputs": tf.TensorSpec(shape=(3), dtype=tf.float32, name="outputs")
         }
     )
-).batch(batch_size)
+).batch(args.batch_size)
 
 
 # Modeling
