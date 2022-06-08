@@ -151,7 +151,7 @@ ds_train = tf.data.Dataset.from_generator(
             "inp_pos": tf.TensorSpec(shape=(dim_features), dtype=tf.float32, name="inp_pos"),
             "inp_neg": tf.TensorSpec(shape=(dim_features), dtype=tf.float32, name="inp_neg"),
         },
-        tf.TensorSpec(shape=(9), dtype=tf.float32, name="targets"),
+        tf.TensorSpec(shape=(10), dtype=tf.float32, name="targets"),
     )
 ).batch(args.batch_size).prefetch(1)
 
@@ -188,7 +188,7 @@ ds_valid = tf.data.Dataset.from_generator(
             "inp_pos": tf.TensorSpec(shape=(dim_features), dtype=tf.float32, name="inp_pos"),
             "inp_neg": tf.TensorSpec(shape=(dim_features), dtype=tf.float32, name="inp_neg"),
         },
-        tf.TensorSpec(shape=(9), dtype=tf.float32, name="targets"),
+        tf.TensorSpec(shape=(10), dtype=tf.float32, name="targets"),
     )
 ).batch(65536)
 
@@ -258,12 +258,16 @@ def cosine_distance_normalized(a, b, tol=1e-8):
 def loss1_rank_triplet(y_true, y_pred):
     """ Triplet ranking loss between last representation layers """
     # the diffs must be normed to [0,1] by dividing by 6
-    if ok == 0:
-        margin = tf.math.abs(y_true[:, 6]) / 6.0
-    elif ok == 1:
-        margin = tf.math.abs(y_true[:, 7]) / 6.0
-    elif ok == 2:
-        margin = tf.math.abs(y_true[:, 8]) / 6.0
+    ok = tf.cast(y_true[:, -1], dtype=tf.int8)
+    margin = tf.math.multiply(
+        tf.math.abs(y_true[:, 6]) / 6.0, 
+        tf.cast(ok == 0, dtype=tf.float32))
+    margin += tf.math.multiply(
+        tf.math.abs(y_true[:, 7]) / 6.0,
+        tf.cast(ok == 1, dtype=tf.float32))
+    margin += tf.math.multiply(
+        tf.math.abs(y_true[:, 8]) / 6.0,
+        tf.cast(ok == 2, dtype=tf.float32))
     # read model outputs
     n = (y_pred.shape[1] - 9) // 2
     repr_pos = y_pred[:, 9:(9 + n)]
@@ -277,21 +281,25 @@ def loss1_rank_triplet(y_true, y_pred):
 def loss2_mse_target(y_true, y_pred):
     """ MSE loss on positive or negative noise targets """
     # norm to [0,1] by dividing by 6
-    if ok == 0:
-        loss  = tf.reduce_mean(tf.math.pow((y_true[:, 1] - y_pred[:, 1]) / 6.0, 2))
-        loss += tf.reduce_mean(tf.math.pow((y_true[:, 4] - y_pred[:, 4]) / 6.0, 2))
-        loss += tf.reduce_mean(tf.math.pow((y_true[:, 2] - y_pred[:, 2]) / 6.0, 2))
-        loss += tf.reduce_mean(tf.math.pow((y_true[:, 5] - y_pred[:, 5]) / 6.0, 2))
-    elif ok == 1:
-        loss  = tf.reduce_mean(tf.math.pow((y_true[:, 0] - y_pred[:, 0]) / 6.0, 2))
-        loss += tf.reduce_mean(tf.math.pow((y_true[:, 3] - y_pred[:, 3]) / 6.0, 2))
-        loss += tf.reduce_mean(tf.math.pow((y_true[:, 2] - y_pred[:, 2]) / 6.0, 2))
-        loss += tf.reduce_mean(tf.math.pow((y_true[:, 5] - y_pred[:, 5]) / 6.0, 2))
-    elif ok == 2:
-        loss  = tf.reduce_mean(tf.math.pow((y_true[:, 0] - y_pred[:, 0]) / 6.0, 2))
-        loss += tf.reduce_mean(tf.math.pow((y_true[:, 3] - y_pred[:, 3]) / 6.0, 2))
-        loss += tf.reduce_mean(tf.math.pow((y_true[:, 1] - y_pred[:, 1]) / 6.0, 2))
-        loss += tf.reduce_mean(tf.math.pow((y_true[:, 4] - y_pred[:, 4]) / 6.0, 2))
+    ok = tf.cast(y_true[:, -1], dtype=tf.int8)
+    loss  = tf.reduce_mean(tf.math.pow(tf.math.multiply(
+        (y_true[:, 0] - y_pred[:, 0]) / 6.0, 
+        tf.cast((ok == 1) | (ok == 2), dtype=tf.float32)), 2))
+    loss += tf.reduce_mean(tf.math.pow(tf.math.multiply(
+        (y_true[:, 3] - y_pred[:, 3]) / 6.0, 
+        tf.cast((ok == 1) | (ok == 2), dtype=tf.float32)), 2))
+    loss += tf.reduce_mean(tf.math.pow(tf.math.multiply(
+        (y_true[:, 1] - y_pred[:, 1]) / 6.0, 
+        tf.cast((ok == 0) | (ok == 2), dtype=tf.float32)), 2))
+    loss += tf.reduce_mean(tf.math.pow(tf.math.multiply(
+        (y_true[:, 4] - y_pred[:, 4]) / 6.0, 
+        tf.cast((ok == 0) | (ok == 2), dtype=tf.float32)), 2))
+    loss += tf.reduce_mean(tf.math.pow(tf.math.multiply(
+        (y_true[:, 2] - y_pred[:, 2]) / 6.0, 
+        tf.cast((ok == 0) | (ok == 1), dtype=tf.float32)), 2))
+    loss += tf.reduce_mean(tf.math.pow(tf.math.multiply(
+        (y_true[:, 5] - y_pred[:, 5]) / 6.0, 
+        tf.cast((ok == 0) | (ok == 1), dtype=tf.float32)), 2))
     return loss
 
 
