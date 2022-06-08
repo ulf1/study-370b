@@ -231,7 +231,7 @@ history = model.fit(
     ds_train, 
     validation_data=ds_valid,
     callbacks=callbacks,
-    epochs=5,
+    epochs=500,
 )
 
 with open(f"best-model-370c-{args.corr_trgt}-{args.corr_regul}/history.json", 'w') as fp:
