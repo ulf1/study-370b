@@ -5,10 +5,14 @@ import json
 import gc
 import argparse
 from featureeng import preprocessing
+from utils import get_random_mos
+import keras_cor as kcor
 
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--corr-trgt', type=int, default=0)
+parser.add_argument('--corr-trgt', type=int, default=1)
+parser.add_argument('--corr-regul', type=int, default=1)
+parser.add_argument('--batch-size', type=int, default=128)
 args = parser.parse_args()
 
 
@@ -22,13 +26,20 @@ y2mos = df["MOS_Understandability"].values
 y2std = df["Std_Understandability"].values
 y3mos = df["MOS_Lexical_difficulty"].values
 y3std = df["Std_Lexical_difficulty"].values
+# free memory
+del df
+gc.collect()
 
 # Correlation between outputs
 y_rho = np.corrcoef(np.c_[y1mos, y2mos, y3mos], rowvar=False)
 
-# free memory
-del df
-gc.collect()
+# Target correlations
+target_corr = []
+for i in range(y_rho.shape[0]):
+    for j in range(1 + i, y_rho.shape[1]):
+        target_corr.append(y_rho[i, j])
+target_corr = tf.stack(target_corr)
+target_corr = tf.cast(target_corr, dtype=tf.float32)
 
 
 # Masks for 6x6 buckets
@@ -52,9 +63,8 @@ for idxm in range(6):
 
 
 # Feature Engineering
-# preprocess all examples
 feats1, feats2, feats3, feats4, feats5, feats6 = preprocessing(texts)
-# delete_models()
+
 
 print("Number of features")
 print(f"{'Num SBert':>20s}: {feats1[0].shape[0]}")
@@ -67,25 +77,6 @@ print(f"{'Morph./lexemes':>20s}: {feats6[0].shape[0]}")
 
 
 # Dataset Generator for Siamese Net
-def get_random_mos(y1m, y1s, y2m, y2s, y3m, y3s, corr_trgt=0):
-    if corr_trgt == 0:
-        # simulate uncorrelated random scores
-        y1 = np.random.normal(loc=y1m, scale=y1s, size=1)
-        y2 = np.random.normal(loc=y2m, scale=y2s, size=1)
-        y3 = np.random.normal(loc=y3m, scale=y3s, size=1)
-        y1 = np.maximum(1.0, np.minimum(7.0, y1))[0]
-        y2 = np.maximum(1.0, np.minimum(7.0, y2))[0]
-        y3 = np.maximum(1.0, np.minimum(7.0, y3))[0]
-    elif corr_trgt == 1:
-        # simulate correlated random scores
-        Y = np.random.standard_normal((1, 3))
-        Y = np.dot(Y, np.linalg.cholesky(y_rho).T)[0]
-        y1 = np.maximum(1.0, np.minimum(7.0, Y[0] * y1s + y1m))
-        y2 = np.maximum(1.0, np.minimum(7.0, Y[1] * y2s + y2m))
-        y3 = np.maximum(1.0, np.minimum(7.0, Y[2] * y3s + y3m))
-    return y1, y2, y3
-
-
 def draw_example_index(bucket_indicies):
     # draw example IDs i,j from buckets
     bi, bj = np.random.choice(range(36), size=2)
@@ -114,13 +105,13 @@ def draw_example_index(bucket_indicies):
         wj = (7.0 - byj) / byj.sum()
     j = np.random.choice(idxj, p=wj, size=1)[0]
     # done
-    return i, j
+    return i, j, ok
 
 
 def generator_trainingset(num_draws: int = 65536):
     for _ in range(num_draws):
         # draw example IDs i,j from buckets
-        i, j = draw_example_index(bucket_indicies)
+        i, j, ok = draw_example_index(bucket_indicies)
 
         # merge features
         x0pos = np.hstack(
@@ -131,10 +122,10 @@ def generator_trainingset(num_draws: int = 65536):
         # simulate noise targets
         y1pos, y2pos, y3pos = get_random_mos(
             y1mos[i], y1std[i], y2mos[i], y2std[i], y3mos[i], y3std[i], 
-            corr_trgt=args.corr_trgt)
+            y_rho=y_rho, corr_trgt=args.corr_trgt)
         y1neg, y2neg, y3neg = get_random_mos(
             y1mos[j], y1std[j], y2mos[j], y2std[j], y3mos[j], y3std[j], 
-            corr_trgt=args.corr_trgt)
+            y_rho=y_rho, corr_trgt=args.corr_trgt)
 
         # compute differences
         d1 = y1mos[i] - y1mos[j]
@@ -142,14 +133,12 @@ def generator_trainingset(num_draws: int = 65536):
         d3 = y3mos[i] - y3mos[j]
 
         # concat targets
-        targets = [y1pos, y2pos, y3pos, y1neg, y2neg, y3neg, d1, d2, d3]
+        targets = [y1pos, y2pos, y3pos, y1neg, y2neg, y3neg, d1, d2, d3, ok]
         yield {
             "inp_pos": tf.cast(x0pos, dtype=tf.float32, name="inp_pos"),
             "inp_neg": tf.cast(x0neg, dtype=tf.float32, name="inp_neg"),
         }, tf.constant(targets, dtype=tf.float32, name="targets")
 
-
-batch_size = 128
 
 dim_features = len(feats1[0]) + len(feats2[0]) + len(feats3[0]) + len(feats4[0]) + len(feats5[0]) + len(feats6[0])
 
@@ -162,16 +151,16 @@ ds_train = tf.data.Dataset.from_generator(
             "inp_pos": tf.TensorSpec(shape=(dim_features), dtype=tf.float32, name="inp_pos"),
             "inp_neg": tf.TensorSpec(shape=(dim_features), dtype=tf.float32, name="inp_neg"),
         },
-        tf.TensorSpec(shape=(9), dtype=tf.float32, name="targets"),
+        tf.TensorSpec(shape=(10), dtype=tf.float32, name="targets"),
     )
-).batch(batch_size).prefetch(1)
+).batch(args.batch_size).prefetch(1)
 
 
 # Validation set
 def generator_validationset(num_draws=65536):
     for _ in range(num_draws):
         # draw example IDs i,j from buckets
-        i, j = draw_example_index(bucket_indicies)
+        i, j, ok = draw_example_index(bucket_indicies)
 
         # merge features
         x0pos = np.hstack(
@@ -185,7 +174,7 @@ def generator_validationset(num_draws=65536):
         d3 = y3mos[i] - y3mos[j]
 
         # concat targets
-        targets = [y1mos[i], y2mos[i], y3mos[i], y1mos[j], y2mos[j], y3mos[j], d1, d2, d3]
+        targets = [y1mos[i], y2mos[i], y3mos[i], y1mos[j], y2mos[j], y3mos[j], d1, d2, d3, ok]
         yield {
             "inp_pos": tf.cast(x0pos, dtype=tf.float32, name="inp_pos"),
             "inp_neg": tf.cast(x0neg, dtype=tf.float32, name="inp_neg"),
@@ -199,7 +188,7 @@ ds_valid = tf.data.Dataset.from_generator(
             "inp_pos": tf.TensorSpec(shape=(dim_features), dtype=tf.float32, name="inp_pos"),
             "inp_neg": tf.TensorSpec(shape=(dim_features), dtype=tf.float32, name="inp_neg"),
         },
-        tf.TensorSpec(shape=(9), dtype=tf.float32, name="targets"),
+        tf.TensorSpec(shape=(10), dtype=tf.float32, name="targets"),
     )
 ).batch(65536)
 
@@ -208,7 +197,8 @@ xy_valid = list(ds_valid)[0]  # generate once!
 
 # Build the Scoring Model
 def build_scoring_model(dim_features: int, 
-                        n_units=64, activation="gelu", dropout=0.4):
+                        n_units=32, activation="gelu", dropout=0.4,
+                        target_corr=None, cor_rate=0.1):
     # the input tensor
     inputs = tf.keras.Input(shape=(dim_features,), name="inputs")
 
@@ -225,36 +215,24 @@ def build_scoring_model(dim_features: int,
         dropout, name="linear_reduce_dropout")(x)
 
     # Dense + 4.0
-    out1_mos = tf.keras.layers.Dense(
-        units=1, use_bias=False,
+    mos = tf.keras.layers.Dense(
+        units=3, use_bias=False,
         kernel_initializer='glorot_uniform',
     )(x)
-    out1_mos = tf.keras.layers.Lambda(
-        lambda s: s + tf.constant(4.0), name='mos1'
-    )(out1_mos)
-
-    # Dense + 4.0
-    out2_mos = tf.keras.layers.Dense(
-        units=1, use_bias=False,
-        kernel_initializer='glorot_uniform',
-    )(x)
-    out2_mos = tf.keras.layers.Lambda(
-        lambda s: s + tf.constant(4.0), name='mos2'
-    )(out2_mos)
-
-    # Dense + 4.0
-    out3_mos = tf.keras.layers.Dense(
-        units=1, use_bias=False,
-        kernel_initializer='glorot_uniform',
-    )(x)
-    out3_mos = tf.keras.layers.Lambda(
-        lambda s: s + tf.constant(4.0), name='mos3'
-    )(out3_mos)
+    # mos = tf.keras.layers.Dense(
+    #     units=3, use_bias=False,
+    #     kernel_initializer='glorot_uniform',
+    # )(mos)
+    mos = tf.keras.layers.Lambda(
+        lambda s: s + tf.constant(4.0), name='mos'
+    )(mos)
+    if args.corr_regul == 1:
+        mos = kcor.CorrOutputsRegularizer(target_corr, cor_rate=cor_rate)(mos)
 
     # Function API model
     model = tf.keras.Model(
         inputs=[inputs],
-        outputs=[out1_mos, out2_mos, out3_mos, x],
+        outputs=[mos, x],
         name="scoring_model"
     )
     # done
@@ -280,10 +258,16 @@ def cosine_distance_normalized(a, b, tol=1e-8):
 def loss1_rank_triplet(y_true, y_pred):
     """ Triplet ranking loss between last representation layers """
     # the diffs must be normed to [0,1] by dividing by 6
-    margin1 = tf.math.abs(y_true[:, 6]) / 6.0
-    margin2 = tf.math.abs(y_true[:, 7]) / 6.0
-    margin3 = tf.math.abs(y_true[:, 8]) / 6.0
-    margin = tf.math.maximum(tf.math.maximum(margin1, margin2), margin3)
+    ok = tf.cast(y_true[:, -1], dtype=tf.int8)
+    margin = tf.math.multiply(
+        tf.math.abs(y_true[:, 6]) / 6.0, 
+        tf.cast(ok == 0, dtype=tf.float32))
+    margin += tf.math.multiply(
+        tf.math.abs(y_true[:, 7]) / 6.0,
+        tf.cast(ok == 1, dtype=tf.float32))
+    margin += tf.math.multiply(
+        tf.math.abs(y_true[:, 8]) / 6.0,
+        tf.cast(ok == 2, dtype=tf.float32))
     # read model outputs
     n = (y_pred.shape[1] - 9) // 2
     repr_pos = y_pred[:, 9:(9 + n)]
@@ -294,31 +278,40 @@ def loss1_rank_triplet(y_true, y_pred):
     return loss
 
 
-def loss2_mse_diffs(y_true, y_pred):
-    """ MSE loss between actual and predicted margins btw. pos & neg. ex """
-    # norm to [0,1] by dividing by 6
-    loss =  tf.reduce_mean(tf.math.pow(
-        (y_true[:, 6] - (y_pred[:, 0] - y_pred[:, 3])) / 6.0, 2))
-    loss += tf.reduce_mean(tf.math.pow(
-        (y_true[:, 7] - (y_pred[:, 1] - y_pred[:, 4])) / 6.0, 2))
-    loss += tf.reduce_mean(tf.math.pow(
-        (y_true[:, 8] - (y_pred[:, 2] - y_pred[:, 5])) / 6.0, 2))
-    return loss
-
-def loss3_mse_target(y_true, y_pred):
+def loss2_mse_target(y_true, y_pred):
     """ MSE loss on positive or negative noise targets """
     # norm to [0,1] by dividing by 6
-    loss  = tf.reduce_mean(tf.math.pow((y_true[:, 0] - y_pred[:, 0]) / 6.0, 2))
-    loss += tf.reduce_mean(tf.math.pow((y_true[:, 1] - y_pred[:, 1]) / 6.0, 2))
-    loss += tf.reduce_mean(tf.math.pow((y_true[:, 2] - y_pred[:, 2]) / 6.0, 2))
-    loss += tf.reduce_mean(tf.math.pow((y_true[:, 3] - y_pred[:, 3]) / 6.0, 2))
-    loss += tf.reduce_mean(tf.math.pow((y_true[:, 4] - y_pred[:, 4]) / 6.0, 2))
-    loss += tf.reduce_mean(tf.math.pow((y_true[:, 5] - y_pred[:, 5]) / 6.0, 2))
+    ok = tf.cast(y_true[:, -1], dtype=tf.int8)
+    loss  = tf.reduce_mean(tf.math.pow(tf.math.multiply(
+        (y_true[:, 0] - y_pred[:, 0]) / 6.0, 
+        tf.cast((ok == 1) | (ok == 2), dtype=tf.float32)), 2))
+    loss += tf.reduce_mean(tf.math.pow(tf.math.multiply(
+        (y_true[:, 3] - y_pred[:, 3]) / 6.0, 
+        tf.cast((ok == 1) | (ok == 2), dtype=tf.float32)), 2))
+    loss += tf.reduce_mean(tf.math.pow(tf.math.multiply(
+        (y_true[:, 1] - y_pred[:, 1]) / 6.0, 
+        tf.cast((ok == 0) | (ok == 2), dtype=tf.float32)), 2))
+    loss += tf.reduce_mean(tf.math.pow(tf.math.multiply(
+        (y_true[:, 4] - y_pred[:, 4]) / 6.0, 
+        tf.cast((ok == 0) | (ok == 2), dtype=tf.float32)), 2))
+    loss += tf.reduce_mean(tf.math.pow(tf.math.multiply(
+        (y_true[:, 2] - y_pred[:, 2]) / 6.0, 
+        tf.cast((ok == 0) | (ok == 1), dtype=tf.float32)), 2))
+    loss += tf.reduce_mean(tf.math.pow(tf.math.multiply(
+        (y_true[:, 5] - y_pred[:, 5]) / 6.0, 
+        tf.cast((ok == 0) | (ok == 1), dtype=tf.float32)), 2))
+    return loss
+
+
+def loss_total(y_true, y_pred):
+    loss = .75 * loss1_rank_triplet(y_true, y_pred)
+    loss += .25 * loss2_mse_target(y_true, y_pred)
     return loss
 
 
 def build_siamese_net(dim_features: int, 
-                      n_units=64, activation="gelu", dropout=0.4):
+                      n_units=32, activation="gelu", dropout=0.4,
+                      target_corr=None, cor_rate=0.1):
     # the input tensors
     inp_pos = tf.keras.Input(shape=(dim_features,), name='inp_pos')
     inp_neg = tf.keras.Input(shape=(dim_features,), name='inp_neg')
@@ -328,11 +321,14 @@ def build_siamese_net(dim_features: int,
         dim_features=dim_features,
         n_units=n_units,
         activation=activation,
-        dropout=dropout)
+        dropout=dropout,
+        target_corr=target_corr, 
+        cor_rate=cor_rate
+    )
 
     # predict examples for each input
-    y1_pos, y2_pos, y3_pos, repr_pos = scorer(inp_pos)
-    y1_neg, y2_neg, y3_neg, repr_neg = scorer(inp_neg)
+    y_pos, repr_pos = scorer(inp_pos)
+    y_neg, repr_neg = scorer(inp_neg)
 
     # Function API model
     model = tf.keras.Model(
@@ -341,8 +337,7 @@ def build_siamese_net(dim_features: int,
             'inp_neg': inp_neg,
         },
         outputs=tf.keras.backend.concatenate([
-            y1_pos, y2_pos, y3_pos,
-            y1_neg, y2_neg, y3_neg,
+            y_pos, y_neg,
             repr_pos, repr_neg
         ], axis=1),
         name="scorer_contrast"
@@ -355,9 +350,10 @@ def build_siamese_net(dim_features: int,
             beta_1=.9, beta_2=.999, epsilon=1e-7,  # Kingma and Ba, 2014, p.2
             amsgrad=True  # Reddi et al, 2018, p.5-6
         ),
-        loss=[loss1_rank_triplet, loss2_mse_diffs, loss3_mse_target],
-        loss_weights=[0.5, 0.1, 0.4],
-        metrics=[loss1_rank_triplet, loss2_mse_diffs, loss3_mse_target],
+        loss=[loss_total],
+        # loss=[loss1_rank_triplet, loss2_mse_target],
+        # loss_weights=[0.75, 0.25],  # Seems to have a TF2/Keras bug
+        metrics=[loss_total, loss1_rank_triplet, loss2_mse_target],
     )
 
     return model
@@ -373,7 +369,7 @@ callbacks = [
         restore_best_weights=True
     ),
     tf.keras.callbacks.ModelCheckpoint(
-        filepath=f"best-model-370b-siamese-{args.corr_trgt}",
+        filepath=f"best-model-370b-siamese-{args.corr_trgt}-{args.corr_regul}",
         monitor="val_loss",
         mode="min",
         save_best_only=True,
@@ -382,7 +378,8 @@ callbacks = [
 
 
 model = build_siamese_net(
-    dim_features, n_units=64, activation="gelu", dropout=0.4)
+    dim_features, n_units=32, activation="gelu", dropout=0.4,
+    target_corr=target_corr, cor_rate=0.1)
 
 
 history = model.fit(
@@ -393,6 +390,6 @@ history = model.fit(
 )
 
 
-with open(f"best-model-370b-siamese-{args.corr_trgt}/history.json", 'w') as fp:
+with open(f"best-model-370b-siamese-{args.corr_trgt}-{args.corr_regul}/history.json", 'w') as fp:
     json.dump(history.history, fp)
 

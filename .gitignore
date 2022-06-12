@@ -133,3 +133,6 @@ TextComplexityDE-master
 master.zip
 SMOR/
 SMOR-linux.zip
+nohup.out
+cache/
+.DS_Store

@@ -6,4 +6,9 @@ ipasymbols==0.0.1
 epitran==1.18
 sfst-transduce==1.0.1
 tensorflow==2.8.0
+protobuf<=3.20.*
+keras-cor==0.1.0
 
+# diagrams
+jupyterlab
+matplotlib
