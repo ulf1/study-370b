@@ -189,4 +189,6 @@ def preprocessing(texts):
         feats6.append(np.hstack([pdf1, pdf2, pdf3]))
 
     # done
-    return feats1, feats2, feats3, feats4, feats5, feats6
+    return (
+        feats1, np.vstack(feats2), np.vstack(feats3),
+        np.vstack(feats4), np.vstack(feats5), np.vstack(feats6))
