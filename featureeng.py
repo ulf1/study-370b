@@ -10,6 +10,9 @@ import re
 from collections import Counter
 import string
 import numpy as np
+import nltk
+import pandas as pd
+import gc
 
 
 # Load the pretrained models
@@ -19,47 +22,144 @@ model_trankit = trankit.Pipeline(lang='german-hdt', gpu=hasgpu, cache_dir='./cac
 model_epi = epitran.Epitran('deu-Latn')
 model_fst = sfst_transduce.Transducer("./SMOR/lib/smor.a")
 
+# load COW frequency list
+stemmer = nltk.stem.Cistem()
+df_decow = pd.read_csv('decow/decow.csv', index_col=['word'])
+df_decow = df_decow[df_decow["freq"] > 100]  # removes ~97% of rows!
+df_decow = np.log(df_decow + 1.)
+df_decow = df_decow / df_decow.max()
+# df_decow.at[stemmer.stem(word), 'freq']
+decow = {row[0]: row[1].values[0] for row in df_decow.iterrows()}
+del df_decow
+gc.collect()
+
+# load DeReChar frequency list
+with open('derechar/derechar.txt', 'r') as fp:
+    dat = fp.readlines()
+
+dat = [s.lstrip() for s in dat]
+dat = [s for s in dat if len(s) >= 2]
+dat = [s for s in dat if 48 <= ord(s[0]) <= 57]
+dat = [s.split(" ") for s in dat]
+dat = [row for row in dat if len(row) == 2]
+dat = [(int(num.replace(".", "")), bi.split("\n")[0]) for num, bi in dat]
+
+derechar = {s: num for num, s in dat if len(s) == 1 and num > 0}
+denom = max([num for _, num in derechar.items()])
+derechar = {s: num / denom for s, num in derechar.items()}
+
+derebigr = {s: num for num, s in dat if len(s) == 2 and num > 0}
+denom = max([num for _, num in derebigr.items()])
+derebigr = {s: num / denom for s, num in derebigr.items()}
+
 
 # code for PoS-tag distribution
+# https://universaldependencies.org/u/pos/
+# -ndbt/nid- = not detected by trankit, or not in dataset
 TAGSET = [
-    '$(', '$,', '$.', 'ADJA', 'ADJD', 'ADV', 'APPO', 'APPR', 'APPRART',
-    'APZR', 'ART', 'CARD', 'FM', 'ITJ', 'KOKOM', 'KON', 'KOUI', 'KOUS',
-    'NE', 'NN', 'NNE', 'PDAT', 'PDS', 'PIAT', 'PIS', 'PPER', 'PPOSAT',
-    'PPOSS', 'PRELAT', 'PRELS', 'PRF', 'PROAV', 'PTKA', 'PTKANT',
-    'PTKNEG', 'PTKVZ', 'PTKZU', 'PWAT', 'PWAV', 'PWS', 'TRUNC', 'VAFIN',
-    'VAIMP', 'VAINF', 'VAPP', 'VMFIN', 'VMINF', 'VMPP', 'VVFIN', 'VVIMP',
-    'VVINF', 'VVIZU', 'VVPP', 'XY', '_SP']
+    'ADJ', 
+    'ADP', 
+    'ADV', 
+    'AUX', 
+    'CCONJ', 
+    'DET', 
+    'INTJ', 
+    'NOUN', 
+    'NUM',
+    'PART', 
+    'PRON', 
+    'PROPN', 
+    'PUNCT', 
+    'SCONJ', 
+    # 'SYM',  # -ndbt/nid-
+    'VERB', 
+    'X'
+]
+
 
 def get_postag_distribution(postags):
     n_tokens = len(postags)
     cnt = Counter(postags)
-    pdf = np.zeros((len(TAGSET) + 1,))
+    pdf = np.zeros((len(TAGSET),))
     for key, val in cnt.items():
         try:
             idx = TAGSET.index(key)
         except:
-            idx = len(TAGSET)
+            idx = TAGSET.index("X")
+            # idx = len(TAGSET)
         pdf[idx] = val / n_tokens
     return pdf
 
 
 # morphtags
+# Ensure that all STTS conversions are included
+# https://universaldependencies.org/tagset-conversion/de-stts-uposf.html
+# -ndbt/nid- = not detected by trankit, or not in dataset
 MORPHTAGS = [
-    "Gender=Fem", "Gender=Masc", "Gender=Neut",
-    "Number=Sing", "Number=Plur",
-    "Person=1", "Person=2", "Person=3",
-    "Case=Nom", "Case=Dat", "Case=Gen", "Case=Acc",
-    "Definite=Ind", "Definite=Def",
-    "VerbForm=Conv", "Verbform=Fin", "Verbform=Gdv", "Verbform=Ger", 
-    "Verbform=Inf", "Verbform=Part", "Verbform=Sup", "Verbform=Vnoun",
-    "Degree=Pos", "Degree=Cmp", "Degree=Sup",
-    "Polarity=Neg",
-    "Mood=Ind", "Mood=Imp", "Mood=Sub",
-    "Tense=Pres", "Tense=Past", "Tense=Fut", "Tense=Imp", "Tense=Pqp", 
-    "NumType=",  # any
-    "Poss=",
-    "Reflex=",
-    "Polite="
+    # punctuation type (3/11)
+    "PunctType=Brck",  # `$(`
+    "PunctType=Comm",  # `$,`
+    "PunctType=Peri",  # `$.`
+    # adposition type (3/4)
+    "AdpType=Post",  # APPO
+    "AdpType=Prep",  # APPR, APPRART
+    "AdpType=Circ",  # APZR
+    # particle type (3/6)
+    "PartType=Res",  # PTKANT
+    "PartType=Vbp",  # PTKVZ
+    "PartType=Inf",  # PTKZU
+    # pronominal type (8/11)
+    "PronType=Art",  # APPRART, ART
+    "PronType=Dem",  # PAV, PDAT, PDS
+    "PronType=Ind",  # PIAT, PIDAT, PIS
+    # "PronType=Neg",  # PIAT, PIDAT, PIS -ndbt/nid-
+    # "PronType=Tot",  # PIAT, PIDAT, PIS -ndbt/nid-
+    "PronType=Prs",  # PPER, PPOSAT, PPOSS, PRF
+    "PronType=Rel",  # PRELAT, PRELS
+    "PronType=Int",  # PWAT, PWAV, PWS
+    # other related to STTS post tags
+    # "AdjType=Pdt",  # PIDAT -ndbt/nid-
+    "ConjType=Comp",  # KOKOM
+    "Foreign=Yes",  # FM
+    "Hyph=Yes",  # TRUNC
+    "NumType=Card",  # CARD
+    "Polarity=Neg",  # PTKNEG
+    "Poss=Yes",  # PPOSAT, PPOSS
+    "Reflex=Yes",  # PRF
+    "Variant=Short",  # ADJD
+    # verbs
+    "VerbForm=Fin",  # VAFIN, VAIMP, VMFIN, VVFIN, VVIMP
+    "VerbForm=Inf",  # VAINF, VVINF, VVIZU
+    "VerbForm=Part",  # VAPP, VMPP, VVPP
+    "Mood=Ind",  # VAFIN, VMFIN, VVFIN
+    "Mood=Imp",  # VAIMP, VVIMP
+    # "Mood=Sub",  # -ndbt/nid-
+    "Aspect=Perf",  # VAPP, VMPP, VVPP
+    "VerbType=Mod",  # VMPP
+    # other syntax
+    "Gender=Fem", 
+    "Gender=Masc", 
+    "Gender=Neut",
+    "Number=Sing", 
+    "Number=Plur",
+    "Person=1", 
+    "Person=2", 
+    "Person=3",
+    "Case=Nom", 
+    "Case=Dat", 
+    "Case=Gen", 
+    "Case=Acc",
+    # "Definite=Ind",  # -ndbt/nid-
+    # "Definite=Def",  # -ndbt/nid-
+    "Degree=Pos", 
+    "Degree=Cmp", 
+    "Degree=Sup",
+    "Tense=Pres", 
+    "Tense=Past", 
+    # "Tense=Fut",  # -ndbt/nid-
+    # "Tense=Imp",  # -ndbt/nid-
+    # "Tense=Pqp",  # -ndbt/nid-
+    # "Polite=",  # -ndbt/nid-  
 ]
 
 def get_morphtag_distribution(snt):
@@ -147,6 +247,35 @@ def get_morphology_distributions(sent):
     return pdf1, pdf2, pdf3
 
 
+def get_word_freq_distribution(sent):
+    words = sent.split(" ")
+    freqs = [decow.get(stemmer.stem(w), 0) for w in words]
+    pdf = np.histogram(freqs, bins=6, range=(0.0, 1.0))[0] / len(freqs)
+    return pdf
+
+
+def get_char_bigram_freq_metrics(txt):
+    metrics = [0., 0., 0., 0.]
+    # average char freq
+    freq = [derechar.get(c, 0.0) for c in txt]
+    metrics[0] = sum(freq) / len(txt)
+    # avg freq of 50% least frequent chars
+    if len(freq) >= 2:
+        least = sorted(freq)[:len(freq) // 2]
+        metrics[1] = sum(least) / len(least)
+    # average bigram freq
+    if len(txt) >= 3:
+        freq = [derebigr.get(txt[i:(i + 2)], 0.0) 
+                for i in range(1, len(txt) - 1)]
+        metrics[2] = sum(freq) / len(freq)
+        # avg freq of 50% least frequent chars
+        if len(freq) >= 2:
+            least = sorted(freq)[:len(freq) // 2]
+            metrics[3] = sum(least) / len(least) 
+    # done
+    return metrics
+
+
 # transfomer function
 def preprocessing(texts):
     # semantic
@@ -170,7 +299,7 @@ def preprocessing(texts):
             tokendist, nodedist, xmin=-5, xmax=15)
         feats2.append(pdf)
         # PoS tag distribution
-        postags = [t.get("xpos") for t in snt['tokens']]
+        postags = [t.get("upos") for t in snt['tokens']]
         pdf = get_postag_distribution(postags)
         feats3.append(pdf)
         # Morphological attributes
@@ -180,6 +309,9 @@ def preprocessing(texts):
     # other tools
     feats5 = []
     feats6 = []  # SMOR: Num morphemes divded by number of words
+    feats7 = []  # COW lemma frequencies
+    feats8 = []  # sentence length
+    feats9 = []  # char/bi-gram frequency
     for txt in texts:
         # phonetics, consonant clusters
         pdf = get_consonant_distibution(txt)
@@ -187,8 +319,19 @@ def preprocessing(texts):
         # morphology/lexeme stats
         pdf1, pdf2, pdf3 = get_morphology_distributions(txt)
         feats6.append(np.hstack([pdf1, pdf2, pdf3]))
+        # lemma frequencies
+        pdf = get_word_freq_distribution(txt)
+        feats7.append(pdf)
+        # sentence length
+        words = txt.split(" ")
+        feats8.append(np.log([len(words) + 1., len(txt) + 1.]))
+        # char/bigram frequencies
+        metrics = get_char_bigram_freq_metrics(txt)
+        feats9.append(metrics)
 
     # done
     return (
         feats1, np.vstack(feats2), np.vstack(feats3),
-        np.vstack(feats4), np.vstack(feats5), np.vstack(feats6))
+        np.vstack(feats4), np.vstack(feats5), np.vstack(feats6),
+        np.vstack(feats7), np.vstack(feats8), np.array(feats9)
+    )

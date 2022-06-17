@@ -130,10 +130,19 @@ dmypy.json
 
 data/
 data2/
+
 TextComplexityDE-master
 master.zip
+
 SMOR/
 SMOR-linux.zip
+
+decow/
+decow_wordfreq_cistem.csv*
+
+derechar/
+DeReChar-v-bi-DRC-2021-10-31-1.0.txt
+
 nohup.out
 cache/
 .DS_Store

@@ -8,6 +8,8 @@ sfst-transduce==1.0.1
 tensorflow==2.8.0
 protobuf<=3.20.*
 keras-cor==0.1.0
+scikit-learn>=1,<2
+nltk>=3.7,<4
 
 # diagrams
 jupyterlab

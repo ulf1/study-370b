@@ -29,8 +29,29 @@ unzip -n "SMOR-linux.zip"
 rm SMOR-linux.zip
 ```
 
-## Run experiments
+Download COW lemma frequencies
+```sh
+wget -nc -q "https://nlp-data-filestorage.s3.eu-central-1.amazonaws.com/word-frequencies/decow_wordfreq_cistem.csv.7z"
+p7zip -d "decow_wordfreq_cistem.csv.7z"
+mkdir -p decow
+mv decow_wordfreq_cistem.csv decow/decow.csv
+rm decow_wordfreq_cistem.csv.7z
+```
+
+Download DeReChar frequencies
+```sh
+wget -nc -q "https://www.ids-mannheim.de/fileadmin/kl/derewo/DeReChar-v-bi-DRC-2021-10-31-1.0.txt"
+mkdir -p derechar
+mv DeReChar-v-bi-DRC-2021-10-31-1.0.txt derechar/derechar.txt
+```
+
+## Preprocess Features
 
 ```sh
-nohup bash run-all.sh &
+python 01-preprocess.py &
+```
+
+## Train models & infer
+```
+python3 11-train-rf.py && python3 11-infer.py
 ```
