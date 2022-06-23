@@ -4,7 +4,6 @@ import gc
 import os
 import maxjoshua as mh
 import tensorflow as tf
-import sklearn.preprocessing
 import json
 from utils import get_random_mos
 import sparsity_pattern
@@ -142,21 +141,24 @@ ds_valid = tf.data.Dataset.from_generator(
 random.seed(42)
 np.random.seed(42)
 
+sp_units = dim_features
+sp_pct = 3. / min(sp_units, dim_features) * 1.05
+
 # layer 1
 indices1 = sparsity_pattern.get(
-    'random', r=dim_features, c=256, pct=0.012)  # 3x per row/col
+    'random', r=dim_features, c=sp_units, pct=sp_pct)  # 3x per row/col
 values1 = np.random.normal(size=(len(indices1),))
 values1 = (values1 / np.abs(values1).sum()).tolist()
 
 # layer 2
 indices2 = sparsity_pattern.get(
-    'random', r=256, c=256, pct=0.012)  # 3x per row/col
+    'random', r=sp_units, c=sp_units, pct=sp_pct)  # 3x per row/col
 values2 = np.random.normal(size=(len(indices2),))
 values2 = (values2 / np.abs(values2).sum()).tolist()
 
 # layer 3
 indices3 = sparsity_pattern.get(
-    'random', r=256, c=256, pct=0.012)  # 3x per row/col
+    'random', r=sp_units, c=sp_units, pct=sp_pct)  # 3x per row/col
 values3 = np.random.normal(size=(len(indices3),))
 values3 = (values3 / np.abs(values3).sum()).tolist()
 
@@ -165,52 +167,55 @@ values3 = (values3 / np.abs(values3).sum()).tolist()
 inputs = tf.keras.Input(shape=(dim_features,), name="inputs")
 
 # (B) layer 1
-h = mh.SparseLayerAsEnsemble(
+h1 = mh.SparseLayerAsEnsemble(
     num_in=dim_features, 
-    num_out=256, 
+    num_out=sp_units, 
     sp_indices=indices1, 
     sp_values=values1,
     sp_trainable=True,
     norm_trainable=False
 )(inputs)
-h = tf.keras.layers.Activation("swish")(h)
+h1 = tf.keras.layers.Activation("swish")(h1)
+# h1 = tf.keras.layers.Dropout(0.5)(h1)
 
 # layer 2
 h2 = mh.SparseLayerAsEnsemble(
-    num_in=256, 
-    num_out=256, 
+    num_in=sp_units, 
+    num_out=sp_units, 
     sp_indices=indices2, 
     sp_values=values2,
     sp_trainable=True,
     norm_trainable=False
-)(h)
+)(h1)
 h2 = tf.keras.layers.Activation("swish")(h2)
-h2 = tf.keras.layers.Dropout(0.5)(h2)
-h = tf.keras.layers.Add()([h, h2])
+# h2 = tf.keras.layers.Dropout(0.5)(h2)
+# h2 = tf.keras.layers.Add()([h1, h2])
 
 # layer 3
-h2 = mh.SparseLayerAsEnsemble(
-    num_in=256, 
-    num_out=256, 
-    sp_indices=indices2, 
-    sp_values=values2,
+h3 = mh.SparseLayerAsEnsemble(
+    num_in=sp_units, 
+    num_out=sp_units, 
+    sp_indices=indices3, 
+    sp_values=values3,
     sp_trainable=True,
     norm_trainable=False
-)(h)
-h2 = tf.keras.layers.Activation("swish")(h2)
-h2 = tf.keras.layers.Dropout(0.5)(h2)
-h = tf.keras.layers.Add()([h, h2])
+)(h2)
+h3 = tf.keras.layers.Activation("swish")(h3)
+# h3 = tf.keras.layers.Dropout(0.5)(h3)
+# h3 = tf.keras.layers.Add()([h2, h3])
+h3 = tf.keras.layers.Add()([inputs, h3])
 
 # (C) final layer
-h = tf.keras.layers.Dense(
+out = tf.keras.layers.Dense(
     units=3, use_bias=True,
-    kernel_initializer='glorot_uniform'
-)(h)
+    kernel_initializer='glorot_uniform',
+    bias_initializer=tf.keras.initializers.Constant(value=4.0)
+)(h3)
 
 # (D) Function API model
 model = tf.keras.Model(
     inputs=[inputs],
-    outputs={"outputs": h},
+    outputs={"outputs": out},
     name="scoring_model"
 )
 # compile
@@ -242,7 +247,7 @@ history = model.fit(
     ds_train, 
     validation_data=ds_valid,
     callbacks=callbacks,
-    epochs=5000,
+    epochs=2000,
 )
 
 with open("./models/model4-sp/history.json", 'w') as fp:
