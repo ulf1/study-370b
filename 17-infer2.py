@@ -7,7 +7,7 @@ import os
 
 
 # load inference dataset
-with open('data/validationset.npy', 'rb') as fp:
+with open('data/testset.npy', 'rb') as fp:
     feats1 = np.load(fp)
     feats2 = np.load(fp)
     feats3 = np.load(fp)
@@ -40,12 +40,12 @@ y2_infer = eps[:, 1] + model1b.predict(feats8[:, 1].reshape(-1, 1))
 y3_infer = eps[:, 2] + model1c.predict(feats8[:, 1].reshape(-1, 1))
 
 # save 
-df = pd.read_csv("./data2/validation_set.csv", encoding="utf-8")
+df = pd.read_csv("./data2/part2_public.csv", encoding="utf-8")
 df["MOS"] = np.maximum(1.0, np.minimum(7.0, y1_infer))
 df[["ID", "MOS"]].to_csv("./models/model7-rf/answer.csv", index=False)
 
 # zip upload file
-with ZipFile("./models/model7-rf/answer7-rf.csv.zip", 'w') as zipf:
+with ZipFile("./models/model7-rf/answer7-test.csv.zip", 'w') as zipf:
     zipf.write("./models/model7-rf/answer.csv", arcname="answer.csv")
 
 # remove answer.csv
