@@ -54,4 +54,6 @@ python 01-preprocess.py &
 ## Train models & infer
 ```
 python3 11-train-rf.py && python3 11-infer.py
+python3 16-train-rf.py && python3 16-infer.py
+python3 17-train-rf.py && python3 17-infer.py
 ```
