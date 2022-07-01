@@ -50,3 +50,17 @@ with ZipFile("./models/model7-rf/answer7-test.csv.zip", 'w') as zipf:
 
 # remove answer.csv
 os.remove("./models/model7-rf/answer.csv")
+
+
+# linear model
+y1_pred = model1a.predict(feats8[:, 1].reshape(-1, 1))
+# save 
+df = pd.read_csv("./data2/part2_public.csv", encoding="utf-8")
+df["MOS"] = np.maximum(1.0, np.minimum(7.0, y1_pred))
+df[["ID", "MOS"]].to_csv("./models/model7-rf/answer.csv", index=False)
+# zip upload file
+with ZipFile("./models/model7-rf/answer7a-test.csv.zip", 'w') as zipf:
+    zipf.write("./models/model7-rf/answer.csv", arcname="answer.csv")
+# remove answer.csv
+os.remove("./models/model7-rf/answer.csv")
+
