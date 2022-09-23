@@ -1,4 +1,4 @@
-# [370b] TextComplexityDE - Noise Targets 
+# [370b] TextComplexityDE
 
 ## Install a virtual environment
 
@@ -57,3 +57,18 @@ python3 11-train-rf.py && python3 11-infer.py
 python3 16-train-rf.py && python3 16-infer.py
 python3 17-train-rf.py && python3 17-infer.py
 ```
+
+## Citation
+You can cite the following paper if you want to use this repository in your research work.
+
+@inproceedings{hamster-2022-everybody,
+    title = "Everybody likes short sentences - A Data Analysis for the Text Complexity {DE} Challenge 2022",
+    author = "Hamster, Ulf A.",
+    booktitle = "Proceedings of the GermEval 2022 Workshop on Text Complexity Assessment of German Text",
+    month = sep,
+    year = "2022",
+    address = "Potsdam, Germany",
+    publisher = "Association for Computational Linguistics",
+    url = "https://aclanthology.org/2022.germeval-1.2",
+    pages = "10--14",
+}
