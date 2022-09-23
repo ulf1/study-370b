@@ -60,7 +60,7 @@ python3 17-train-rf.py && python3 17-infer.py
 
 ## Citation
 You can cite the following paper if you want to use this repository in your research work.
-
+```
 @inproceedings{hamster-2022-everybody,
     title = "Everybody likes short sentences - A Data Analysis for the Text Complexity {DE} Challenge 2022",
     author = "Hamster, Ulf A.",
@@ -72,3 +72,4 @@ You can cite the following paper if you want to use this repository in your rese
     url = "https://aclanthology.org/2022.germeval-1.2",
     pages = "10--14",
 }
+```
